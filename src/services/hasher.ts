@@ -1,4 +1,4 @@
-import { CustodyEvent } from '../types';
+import type { CustodyEvent } from '../types/index.ts';
 
 export const GENESIS_PREV_HASH = '0'.repeat(64);
 

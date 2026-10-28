@@ -1,27 +1,33 @@
-import { 
-  BatteryPassport, 
-  PassportSummary, 
-  CustodyEvent, 
+import {
+  BatteryPassport,
+  PassportSummary,
+  CustodyEvent,
   CustodyTransfer,
   DispositionDecision,
-  AuditVerification, 
-  PublicVerification, 
-  QpiAIOptResponse, 
+  AuditVerification,
+  PublicVerification,
+  QpiAIOptResponse,
   QpiAIQuantumResponse,
   UserRole,
   UserProfile,
   Organization,
-  DatabaseStatus
+  DatabaseStatus,
 } from '../types';
-import { supabase, isSupabaseConfigured, getActiveSupabaseConfig, updateSupabaseCredentials } from './supabaseClient';
+import { supabase, isSupabaseConfigured, getActiveSupabaseConfig } from './supabaseClient';
 import { batteryRepository } from './store';
 import { QpiAIOptEngine, QpiAIQuantumEngine } from './qpiai';
 import { safeStorage } from './safeStorage';
 
-let currentRole: UserRole = (safeStorage.getItem('bp360_active_role') as UserRole) || 'MANUFACTURER';
-let currentOrg: string = safeStorage.getItem('bp360_active_org') || 'QuantumVolt Gigafactory';
-let authToken: string = safeStorage.getItem('bp360_token') || 'mock-jwt-token-bp360';
+const API_BASE = '/api/v1';
+const isBrowserRuntime = typeof window !== 'undefined' && typeof window.fetch === 'function';
+
+let currentRole: UserRole =
+  (safeStorage.getItem('bp360_active_role') as UserRole) || 'MANUFACTURER';
+let currentOrg: string =
+  safeStorage.getItem('bp360_active_org') || 'QuantumVolt Gigafactory';
+let authToken: string = safeStorage.getItem('bp360_token') || '';
 let activeUser: UserProfile | null = null;
+let cachedOrganizations: Organization[] = batteryRepository.listOrganizations();
 
 const ROLE_DEFAULT_ORGS: Record<UserRole, string> = {
   MANUFACTURER: 'QuantumVolt Gigafactory',
@@ -37,69 +43,167 @@ const ROLE_DEFAULT_ORGS: Record<UserRole, string> = {
 
 export const setAuthToken = (token: string) => {
   authToken = token;
-  safeStorage.setItem('bp360_token', token);
+  if (token) {
+    safeStorage.setItem('bp360_token', token);
+  } else {
+    safeStorage.removeItem('bp360_token');
+  }
 };
 
 export const getAuthToken = () => authToken;
+
+function isValidJwtFormat(token: string): boolean {
+  return Boolean(
+    token &&
+      token.split('.').length === 3 &&
+      !token.startsWith('jwt-') &&
+      !token.startsWith('token-session-') &&
+      token !== 'mock-jwt-token-bp360'
+  );
+}
+
+let tokenBootstrapPromise: Promise<string> | null = null;
+
+async function ensureBackendToken(): Promise<string> {
+  if (!isBrowserRuntime) return authToken;
+
+  // Prefer active Supabase Auth session token when signed in
+  if (supabase && isSupabaseConfigured) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.access_token) {
+        setAuthToken(data.session.access_token);
+        return data.session.access_token;
+      }
+    } catch {
+      // Fall through to server persona token
+    }
+  }
+
+  if (isValidJwtFormat(authToken)) {
+    return authToken;
+  }
+
+  if (!tokenBootstrapPromise) {
+    tokenBootstrapPromise = (async () => {
+      try {
+        const safeBootstrapRole: UserRole =
+          currentRole === 'ADMINISTRATOR' ? 'MANUFACTURER' : currentRole;
+        const res = await fetch(`${API_BASE}/auth/switch-role`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: safeBootstrapRole, organization: currentOrg }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.access_token) {
+            setAuthToken(data.access_token);
+            return String(data.access_token);
+          }
+        }
+      } catch {
+        // Ignore network bootstrap error
+      } finally {
+        tokenBootstrapPromise = null;
+      }
+      return '';
+    })();
+  }
+
+  return tokenBootstrapPromise;
+}
+
+async function backendFetch<T>(
+  path: string,
+  options: RequestInit = {},
+  requireToken = false
+): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...((options.headers as Record<string, string>) || {}),
+  };
+
+  const token = requireToken
+    ? await ensureBackendToken()
+    : isValidJwtFormat(authToken)
+    ? authToken
+    : '';
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  let res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  });
+
+  // Auto-refresh expired dev JWT once on 401
+  if (res.status === 401 && requireToken && currentRole !== 'PUBLIC') {
+    setAuthToken('');
+    const refreshed = await ensureBackendToken();
+    if (refreshed) {
+      headers['Authorization'] = `Bearer ${refreshed}`;
+      res = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers,
+      });
+    }
+  }
+
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.detail || errBody.error || `Request failed (${res.status})`);
+  }
+
+  return res.json() as Promise<T>;
+}
 
 export const api = {
   // --------------------------------------------------------------------------
   // Database Status & Diagnostics
   // --------------------------------------------------------------------------
   async getDatabaseStatus(): Promise<DatabaseStatus> {
-    const config = getActiveSupabaseConfig();
-    if (!config.isConfigured || !supabase) {
-      return {
-        isConfigured: false,
-        isConnected: false,
-        provider: 'MEMORY_FALLBACK',
-        message: 'Supabase credentials not configured in environment (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY). Running on local thread-safe repository with verified EU regulation seed records.',
-        endpointUrl: config.url || undefined,
-        lastChecked: new Date().toISOString(),
-      };
-    }
-
-    try {
-      // Probe live connectivity
-      const { error } = await supabase.from('batteries').select('count', { count: 'exact', head: true });
-      if (error) {
+    if (isBrowserRuntime) {
+      try {
+        const status = await backendFetch<DatabaseStatus>('/db/status');
+        // Refresh cached enterprise directory in background
+        this.fetchOrganizations().catch(() => {});
+        return status;
+      } catch (err: any) {
         return {
-          isConfigured: true,
+          isConfigured: getActiveSupabaseConfig().isConfigured,
           isConnected: false,
           provider: 'SUPABASE',
-          message: `Supabase reached with error: ${error.message}. Check Row Level Security or API keys.`,
-          endpointUrl: config.url,
+          message: `Backend probe failed: ${err.message || 'Server unreachable'}`,
+          endpointUrl: getActiveSupabaseConfig().url || undefined,
           lastChecked: new Date().toISOString(),
         };
       }
-      return {
-        isConfigured: true,
-        isConnected: true,
-        provider: 'SUPABASE',
-        message: 'Successfully connected to live Supabase PostgreSQL project with RLS enabled.',
-        endpointUrl: config.url,
-        lastChecked: new Date().toISOString(),
-      };
-    } catch (err: any) {
-      return {
-        isConfigured: true,
-        isConnected: false,
-        provider: 'SUPABASE',
-        message: `Connection failed: ${err.message || 'Network error'}`,
-        endpointUrl: config.url,
-        lastChecked: new Date().toISOString(),
-      };
     }
-  },
 
-  setSupabaseCredentials(url: string, key: string) {
-    updateSupabaseCredentials(url, key);
+    const config = getActiveSupabaseConfig();
+    return {
+      isConfigured: config.isConfigured,
+      isConnected: false,
+      provider: config.isConfigured ? 'SUPABASE' : 'MEMORY_FALLBACK',
+      message: 'CLI test mode using local repository.',
+      endpointUrl: config.url || undefined,
+      lastChecked: new Date().toISOString(),
+    };
   },
 
   // --------------------------------------------------------------------------
-  // Supabase Authentication
+  // Supabase & Backend Authentication
   // --------------------------------------------------------------------------
-  async signUp(email: string, password: string, fullName: string, role: UserRole, organizationName?: string) {
+  async signUp(
+    email: string,
+    password: string,
+    fullName: string,
+    role: UserRole,
+    organizationName?: string
+  ) {
+    const resolvedOrg = organizationName || ROLE_DEFAULT_ORGS[role];
     if (supabase && isSupabaseConfigured) {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -108,44 +212,49 @@ export const api = {
           data: {
             full_name: fullName,
             role,
-            organization_name: organizationName || ROLE_DEFAULT_ORGS[role],
+            organization_name: resolvedOrg,
           },
         },
       });
       if (error) throw new Error(error.message);
-      
-      if (data.user) {
+
+      if (data.session?.access_token) {
+        setAuthToken(data.session.access_token);
+        if (isBrowserRuntime) {
+          try {
+            const synced = await backendFetch<UserProfile>(
+              '/auth/sync-profile',
+              { method: 'POST' },
+              true
+            );
+            activeUser = synced;
+            currentRole = synced.role;
+            currentOrg = synced.organization_name;
+            safeStorage.setItem('bp360_active_role', currentRole);
+            safeStorage.setItem('bp360_active_org', currentOrg);
+            await this.fetchOrganizations().catch(() => {});
+          } catch {
+            // Profile will sync on next authenticated call
+          }
+        }
+      } else if (data.user) {
         activeUser = {
           id: data.user.id,
           email: data.user.email || email,
           full_name: fullName,
           role,
           organization_id: `org-${role.toLowerCase()}`,
-          organization_name: organizationName || ROLE_DEFAULT_ORGS[role],
+          organization_name: resolvedOrg,
         };
         currentRole = role;
-        currentOrg = organizationName || ROLE_DEFAULT_ORGS[role];
+        currentOrg = resolvedOrg;
         safeStorage.setItem('bp360_active_role', currentRole);
         safeStorage.setItem('bp360_active_org', currentOrg);
       }
       return data;
     }
 
-    // Local / unconfigured fallback simulation
-    const mockId = `usr-${Date.now()}`;
-    activeUser = {
-      id: mockId,
-      email,
-      full_name: fullName,
-      role,
-      organization_id: `org-${role.toLowerCase()}`,
-      organization_name: organizationName || ROLE_DEFAULT_ORGS[role],
-    };
-    currentRole = role;
-    currentOrg = organizationName || ROLE_DEFAULT_ORGS[role];
-    safeStorage.setItem('bp360_active_role', currentRole);
-    safeStorage.setItem('bp360_active_org', currentOrg);
-    return { user: activeUser, session: { access_token: `jwt-${role.toLowerCase()}-${Date.now()}` } };
+    throw new Error('Supabase Auth is not configured in this environment.');
   },
 
   async signIn(email: string, password: string) {
@@ -156,102 +265,113 @@ export const api = {
       });
       if (error) throw new Error(error.message);
 
-      if (data.user) {
-        const metadata = data.user.user_metadata || {};
-        const role = (metadata.role as UserRole) || 'PUBLIC';
-        const org = metadata.organization_name || ROLE_DEFAULT_ORGS[role] || 'Authorized Enterprise';
-
-        activeUser = {
-          id: data.user.id,
-          email: data.user.email || email,
-          full_name: metadata.full_name || email.split('@')[0],
-          role,
-          organization_id: `org-${role.toLowerCase()}`,
-          organization_name: org,
-        };
-        currentRole = role;
-        currentOrg = org;
-        safeStorage.setItem('bp360_active_role', currentRole);
-        safeStorage.setItem('bp360_active_org', currentOrg);
-        if (data.session) setAuthToken(data.session.access_token);
+      if (data.session?.access_token) {
+        setAuthToken(data.session.access_token);
+        if (isBrowserRuntime) {
+          const synced = await backendFetch<UserProfile>(
+            '/auth/sync-profile',
+            { method: 'POST' },
+            true
+          );
+          activeUser = synced;
+          currentRole = synced.role;
+          currentOrg = synced.organization_name;
+          safeStorage.setItem('bp360_active_role', currentRole);
+          safeStorage.setItem('bp360_active_org', currentOrg);
+        }
       }
       return data;
     }
 
-    // Local fallback sign in
-    const role: UserRole = email.includes('mfg') ? 'MANUFACTURER' : email.includes('recy') ? 'RECYCLER' : email.includes('audit') ? 'REGULATOR_AUDITOR' : 'FLEET_OPERATOR';
-    const org = ROLE_DEFAULT_ORGS[role];
-    activeUser = {
-      id: `usr-${role.toLowerCase()}`,
-      email,
-      full_name: email.split('@')[0],
-      role,
-      organization_id: `org-${role.toLowerCase()}`,
-      organization_name: org,
-    };
-    currentRole = role;
-    currentOrg = org;
-    safeStorage.setItem('bp360_active_role', currentRole);
-    safeStorage.setItem('bp360_active_org', currentOrg);
-    const token = `jwt-${role.toLowerCase()}-${Date.now()}`;
-    setAuthToken(token);
-    return { user: activeUser, session: { access_token: token } };
+    throw new Error('Supabase Auth is not configured in this environment.');
   },
 
   async signOut() {
     if (supabase && isSupabaseConfigured) {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // Ignore signOut network errors
+      }
     }
     activeUser = null;
     currentRole = 'PUBLIC';
-    currentOrg = 'Anonymous Visitor';
-    safeStorage.removeItem('bp360_token');
+    currentOrg = 'Anonymous Citizen';
+    setAuthToken('');
     safeStorage.setItem('bp360_active_role', 'PUBLIC');
-    safeStorage.setItem('bp360_active_org', 'Anonymous Visitor');
+    safeStorage.setItem('bp360_active_org', 'Anonymous Citizen');
   },
 
   async resetPassword(email: string) {
     if (supabase && isSupabaseConfigured) {
-      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
       });
       if (error) throw new Error(error.message);
-      return data;
+      return { message: 'Password recovery instructions sent.' };
     }
-    return { message: 'Password recovery email dispatched (simulated)' };
-  },
-
-  async updatePassword(newPassword: string) {
-    if (supabase && isSupabaseConfigured) {
-      const { data, error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (error) throw new Error(error.message);
-      return data;
-    }
-    return { message: 'Password updated successfully' };
+    throw new Error('Supabase Auth is not configured in this environment.');
   },
 
   async switchRole(role: UserRole, organization?: string) {
     if (role === 'ADMINISTRATOR' && currentRole !== 'ADMINISTRATOR') {
-      throw new Error('Privilege escalation denied: You cannot switch to Administrator without existing administrator credentials.');
+      throw new Error(
+        'Privilege escalation denied: You cannot switch to Administrator without existing administrator credentials.'
+      );
     }
+
+    if (isBrowserRuntime) {
+      // Clear any active Supabase Auth session before switching demo persona
+      if (supabase && isSupabaseConfigured) {
+        await supabase.auth.signOut().catch(() => {});
+      }
+      const data = await backendFetch<{
+        access_token: string;
+        token_type: string;
+        role: UserRole;
+        organization: string;
+        user?: UserProfile;
+      }>(
+        '/auth/switch-role',
+        {
+          method: 'POST',
+          body: JSON.stringify({ role, organization }),
+        },
+        false
+      );
+
+      currentRole = data.role;
+      currentOrg = data.organization;
+      setAuthToken(data.access_token);
+      safeStorage.setItem('bp360_active_role', currentRole);
+      safeStorage.setItem('bp360_active_org', currentOrg);
+      activeUser = data.user || {
+        id: `usr-${role.toLowerCase()}`,
+        email: `${role.toLowerCase()}@batterypass360.eu`,
+        full_name: `${role.replace(/_/g, ' ')} Operator`,
+        role: currentRole,
+        organization_id: `org-${role.toLowerCase()}`,
+        organization_name: currentOrg,
+      };
+      return data;
+    }
+
     currentRole = role;
     currentOrg = organization || ROLE_DEFAULT_ORGS[role] || 'Unknown Organization';
     safeStorage.setItem('bp360_active_role', currentRole);
     safeStorage.setItem('bp360_active_org', currentOrg);
-    const safeToken = `token-session-${role.toLowerCase()}-${Date.now()}`;
-    setAuthToken(safeToken);
+    const localToken = `session-${role.toLowerCase()}-${Date.now()}`;
+    setAuthToken(localToken);
     activeUser = {
       id: `usr-${role.toLowerCase()}`,
       email: `${role.toLowerCase()}@batterypass360.eu`,
       full_name: `${role.replace(/_/g, ' ')} Operator`,
-      role,
+      role: currentRole,
       organization_id: `org-${role.toLowerCase()}`,
       organization_name: currentOrg,
     };
     return {
-      access_token: safeToken,
+      access_token: localToken,
       token_type: 'bearer',
       role: currentRole,
       organization: currentOrg,
@@ -259,6 +379,20 @@ export const api = {
   },
 
   async getMe(): Promise<UserProfile> {
+    if (isBrowserRuntime && currentRole !== 'PUBLIC') {
+      try {
+        const profile = await backendFetch<UserProfile>('/auth/me', {}, true);
+        activeUser = profile;
+        currentRole = profile.role;
+        currentOrg = profile.organization_name;
+        safeStorage.setItem('bp360_active_role', currentRole);
+        safeStorage.setItem('bp360_active_org', currentOrg);
+        return profile;
+      } catch {
+        // Fallback to local persona summary if unauthenticated PUBLIC visitor
+      }
+    }
+
     if (activeUser) return activeUser;
     return {
       id: `usr-${currentRole.toLowerCase()}`,
@@ -274,46 +408,19 @@ export const api = {
   // Passports & Batteries
   // --------------------------------------------------------------------------
   async listPassports(statusFilter?: string): Promise<PassportSummary[]> {
-    if (supabase && isSupabaseConfigured) {
-      try {
-        let query = supabase.from('batteries').select('*');
-        if (statusFilter && statusFilter !== 'ALL') {
-          query = query.eq('status', statusFilter);
-        }
-        const { data, error } = await query;
-        if (!error && data && data.length > 0) {
-          return data.map((b: any) => ({
-            battery_id: b.battery_id,
-            battery_did: b.battery_did,
-            serial_number: b.serial_number,
-            manufacturer_name: b.manufacturer_name,
-            chemistry: b.chemistry,
-            status: b.status,
-            current_custodian: b.current_custodian,
-            state_of_health_pct: b.health_state?.state_of_health_pct ?? 100,
-            rated_capacity_kwh: b.technical_specs?.rated_capacity_kwh ?? 80,
-            updated_at: b.updated_at,
-          }));
-        }
-      } catch (err) {
-        console.warn('Supabase query failed, falling back to repository', err);
-      }
+    if (isBrowserRuntime) {
+      const q =
+        statusFilter && statusFilter !== 'ALL'
+          ? `?status=${encodeURIComponent(statusFilter)}`
+          : '';
+      return backendFetch<PassportSummary[]>(`/passports${q}`);
     }
-    return await batteryRepository.listPassports(statusFilter);
+    return batteryRepository.listPassports(statusFilter);
   },
 
   async getPassport(id: string): Promise<BatteryPassport> {
-    if (supabase && isSupabaseConfigured) {
-      try {
-        const { data, error } = await supabase
-          .from('batteries')
-          .select('*')
-          .or(`battery_id.eq.${id},battery_did.eq.${id}`)
-          .single();
-        if (!error && data) return data as BatteryPassport;
-      } catch (err) {
-        console.warn('Supabase fetch failed, falling back to repository', err);
-      }
+    if (isBrowserRuntime) {
+      return backendFetch<BatteryPassport>(`/passports/${encodeURIComponent(id)}`);
     }
     const passport = await batteryRepository.getPassport(id);
     if (!passport) throw new Error(`Battery passport '${id}' not found`);
@@ -321,96 +428,68 @@ export const api = {
   },
 
   async createPassport(payload: any): Promise<BatteryPassport> {
-    // Enforce role and organization boundaries
-    const created = await batteryRepository.createPassport(payload, {
+    if (isBrowserRuntime) {
+      return backendFetch<BatteryPassport>(
+        '/passports',
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        },
+        true
+      );
+    }
+    return batteryRepository.createPassport(payload, {
       role: currentRole,
       organization: currentOrg,
     });
-
-    if (supabase && isSupabaseConfigured) {
-      try {
-        await supabase.from('batteries').insert(created);
-        const events = await batteryRepository.getCustodyEvents(created.battery_id);
-        if (events.length > 0) {
-          await supabase.from('lifecycle_events').insert({
-            battery_id: created.battery_id,
-            event_number: 0,
-            event_type: 'MANUFACTURED',
-            timestamp: events[0].timestamp,
-            actor_role: events[0].actor_role,
-            actor_organization_id: '11111111-1111-1111-1111-111111111111',
-            location: events[0].location,
-            payload: events[0].payload,
-            prev_hash: events[0].prev_hash,
-            hash: events[0].hash,
-          });
-        }
-      } catch (err) {
-        console.warn('Failed to insert into live Supabase', err);
-      }
-    }
-
-    return created;
   },
 
   async updateTelemetry(id: string, telemetry: any): Promise<BatteryPassport> {
-    const updated = await batteryRepository.updateTelemetry(id, telemetry, {
+    if (isBrowserRuntime) {
+      return backendFetch<BatteryPassport>(
+        `/passports/${encodeURIComponent(id)}/telemetry`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(telemetry),
+        },
+        true
+      );
+    }
+    return batteryRepository.updateTelemetry(id, telemetry, {
       role: currentRole,
       organization: currentOrg,
     });
-    if (supabase && isSupabaseConfigured) {
-      try {
-        await supabase
-          .from('batteries')
-          .update({
-            health_state: updated.health_state,
-            status: updated.status,
-            updated_at: updated.updated_at,
-          })
-          .eq('battery_id', updated.battery_id);
-      } catch (err) {
-        console.warn('Supabase telemetry update warning', err);
-      }
-    }
-    return updated;
   },
 
   // --------------------------------------------------------------------------
   // Custody & Transfers
   // --------------------------------------------------------------------------
   async getCustodyEvents(batteryId: string): Promise<CustodyEvent[]> {
-    if (supabase && isSupabaseConfigured) {
-      try {
-        const { data, error } = await supabase
-          .from('lifecycle_events')
-          .select('*')
-          .eq('battery_id', batteryId)
-          .order('timestamp', { ascending: true });
-        if (!error && data && data.length > 0) return data as CustodyEvent[];
-      } catch (err) {
-        console.warn('Supabase custody fetch failed', err);
-      }
+    if (isBrowserRuntime) {
+      return backendFetch<CustodyEvent[]>(`/custody/${encodeURIComponent(batteryId)}`);
     }
-    return await batteryRepository.getCustodyEvents(batteryId);
+    return batteryRepository.getCustodyEvents(batteryId);
   },
 
   async appendCustodyEvent(batteryId: string, event: any): Promise<CustodyEvent> {
-    return await batteryRepository.appendCustodyEvent(batteryId, event);
+    if (isBrowserRuntime) {
+      return backendFetch<CustodyEvent>(
+        `/custody/${encodeURIComponent(batteryId)}/events`,
+        {
+          method: 'POST',
+          body: JSON.stringify(event),
+        },
+        true
+      );
+    }
+    return batteryRepository.appendCustodyEvent(batteryId, event);
   },
 
   async listTransfers(): Promise<CustodyTransfer[]> {
-    if (supabase && isSupabaseConfigured) {
-      try {
-        const { data, error } = await supabase
-          .from('custody_transfers')
-          .select('*')
-          .order('initiated_at', { ascending: false });
-        if (!error && data && data.length > 0) return data as CustodyTransfer[];
-      } catch (err) {
-        console.warn('Supabase transfers fetch failed', err);
-      }
+    if (isBrowserRuntime) {
+      return backendFetch<CustodyTransfer[]>('/custody-transfers');
     }
-    return await batteryRepository.listCustodyTransfers();
+    return batteryRepository.listCustodyTransfers();
   },
 
   async createTransfer(payload: {
@@ -420,7 +499,17 @@ export const api = {
     transfer_type: string;
     notes?: string;
   }): Promise<CustodyTransfer> {
-    const transfer = await batteryRepository.createCustodyTransfer(
+    if (isBrowserRuntime) {
+      return backendFetch<CustodyTransfer>(
+        '/custody-transfers',
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        },
+        true
+      );
+    }
+    return batteryRepository.createCustodyTransfer(
       {
         ...payload,
         sender_org_name: currentOrg,
@@ -430,69 +519,59 @@ export const api = {
         organization: currentOrg,
       }
     );
-    if (supabase && isSupabaseConfigured) {
-      try {
-        await supabase.from('custody_transfers').insert(transfer);
-      } catch (err) {
-        console.warn('Supabase transfer insert warning', err);
-      }
-    }
-    return transfer;
   },
 
   async acceptTransfer(transferId: string, notes?: string): Promise<CustodyTransfer> {
-    const updated = await batteryRepository.acceptCustodyTransfer(transferId, notes, {
+    if (isBrowserRuntime) {
+      return backendFetch<CustodyTransfer>(
+        `/custody-transfers/${encodeURIComponent(transferId)}/accept`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ notes }),
+        },
+        true
+      );
+    }
+    return batteryRepository.acceptCustodyTransfer(transferId, notes, {
       role: currentRole,
       organization: currentOrg,
     });
-    if (supabase && isSupabaseConfigured) {
-      try {
-        await supabase
-          .from('custody_transfers')
-          .update({
-            state: 'ACCEPTED',
-            responded_at: updated.responded_at,
-            notes: updated.notes,
-          })
-          .eq('id', transferId);
-      } catch (err) {
-        console.warn('Supabase accept transfer warning', err);
-      }
-    }
-    return updated;
   },
 
   async rejectTransfer(transferId: string, reason: string): Promise<CustodyTransfer> {
-    const updated = await batteryRepository.rejectCustodyTransfer(transferId, reason, {
+    if (isBrowserRuntime) {
+      return backendFetch<CustodyTransfer>(
+        `/custody-transfers/${encodeURIComponent(transferId)}/reject`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ reason }),
+        },
+        true
+      );
+    }
+    return batteryRepository.rejectCustodyTransfer(transferId, reason, {
       role: currentRole,
       organization: currentOrg,
     });
-    if (supabase && isSupabaseConfigured) {
-      try {
-        await supabase
-          .from('custody_transfers')
-          .update({
-            state: 'REJECTED',
-            responded_at: updated.responded_at,
-            rejection_reason: updated.rejection_reason,
-          })
-          .eq('id', transferId);
-      } catch (err) {
-        console.warn('Supabase reject transfer warning', err);
-      }
-    }
-    return updated;
   },
 
   // --------------------------------------------------------------------------
   // Verification & Tamper Evidence
   // --------------------------------------------------------------------------
   async verifyPublic(batteryId: string): Promise<PublicVerification> {
-    return await batteryRepository.verifyPublic(batteryId);
+    if (isBrowserRuntime) {
+      return backendFetch<PublicVerification>(`/verify/${encodeURIComponent(batteryId)}`);
+    }
+    return batteryRepository.verifyPublic(batteryId);
   },
 
   async verifyAuditTrail(batteryId: string): Promise<AuditVerification> {
-    return await batteryRepository.verifyAuditTrail(batteryId);
+    if (isBrowserRuntime) {
+      return backendFetch<AuditVerification>(
+        `/verify/${encodeURIComponent(batteryId)}/audit-trail`
+      );
+    }
+    return batteryRepository.verifyAuditTrail(batteryId);
   },
 
   getQrCodeUrl(batteryId: string) {
@@ -503,27 +582,44 @@ export const api = {
   // Disposition & Second-Life
   // --------------------------------------------------------------------------
   async getDispositionDecision(batteryId: string): Promise<DispositionDecision> {
-    return await batteryRepository.getDispositionDecision(batteryId);
+    if (isBrowserRuntime) {
+      return backendFetch<DispositionDecision>(`/decisions/${encodeURIComponent(batteryId)}`);
+    }
+    return batteryRepository.getDispositionDecision(batteryId);
   },
 
   // --------------------------------------------------------------------------
   // Organizations
   // --------------------------------------------------------------------------
+  async fetchOrganizations(): Promise<Organization[]> {
+    if (isBrowserRuntime) {
+      const orgs = await backendFetch<Organization[]>('/organizations');
+      cachedOrganizations = orgs;
+      return orgs;
+    }
+    return cachedOrganizations;
+  },
+
   listOrganizations(): Organization[] {
-    return batteryRepository.listOrganizations();
+    return cachedOrganizations;
   },
 
   // --------------------------------------------------------------------------
   // QpiAI Engines & Execution Records
   // --------------------------------------------------------------------------
   async runQpiAIOpt(batteryIds: string[]): Promise<QpiAIOptResponse> {
-    const batteryData: Array<{
-      battery_id: string;
-      state_of_health_pct: number;
-      cycle_count: number;
-      total_co2_kg_per_kwh: number;
-    }> = [];
+    if (isBrowserRuntime) {
+      return backendFetch<QpiAIOptResponse>(
+        '/qpiai/opt/allocate',
+        {
+          method: 'POST',
+          body: JSON.stringify({ battery_ids: batteryIds }),
+        },
+        false
+      );
+    }
 
+    const batteryData = [];
     for (const id of batteryIds) {
       const p = await batteryRepository.getPassport(id);
       if (p) {
@@ -533,58 +629,33 @@ export const api = {
           cycle_count: p.health_state.cycle_count,
           total_co2_kg_per_kwh: p.carbon_footprint.total_co2_kg_per_kwh,
         });
-      } else {
-        batteryData.push({
-          battery_id: id,
-          state_of_health_pct: 75.0,
-          cycle_count: 1000,
-          total_co2_kg_per_kwh: 65.0,
-        });
       }
     }
-
-    const res = await QpiAIOptEngine.solveAllocation(batteryData);
-
-    // Persist execution record if Supabase is connected
-    if (supabase && isSupabaseConfigured) {
-      try {
-        await supabase.from('qpiai_execution_records').insert({
-          engine_type: 'QPIAI_OPT',
-          battery_id: batteryIds[0] || null,
-          status: res.status,
-          backend: 'QpiAI-Opt-Cloud',
-          job_id: res.job_id || null,
-          parameters: { battery_ids: batteryIds, num_variables: res.num_variables },
-          results: { qubo_sample: res.qubo_sample_matrix, objective: res.objective_value },
-          execution_time_seconds: res.execution_time_seconds || null,
-        });
-      } catch (err) {
-        console.warn('Failed to log QpiAI execution record to Supabase', err);
-      }
-    }
-
-    return res;
+    return QpiAIOptEngine.solveAllocation(batteryData);
   },
 
-  async runQpiAIQuantum(batteryId: string, cathode: string, soh: number, cycles: number): Promise<QpiAIQuantumResponse> {
-    const res = QpiAIQuantumEngine.simulateCathodeDegradation(batteryId, cathode, soh, cycles);
-
-    if (supabase && isSupabaseConfigured) {
-      try {
-        await supabase.from('qpiai_execution_records').insert({
-          engine_type: 'QPIAI_QUANTUM',
-          battery_id: batteryId,
-          status: res.status,
-          backend: res.backend_used,
-          parameters: { cathode, soh, cycles, num_qubits: res.num_qubits, depth: res.circuit_depth },
-          results: { probabilities: res.measured_probabilities, energy: res.estimated_ground_state_energy_hartree },
-          error_message: res.status === 'AUTH_REQUIRED' ? res.message : null,
-        });
-      } catch (err) {
-        console.warn('Failed to log Quantum execution record to Supabase', err);
-      }
+  async runQpiAIQuantum(
+    batteryId: string,
+    cathode: string,
+    soh: number,
+    cycles: number
+  ): Promise<QpiAIQuantumResponse> {
+    if (isBrowserRuntime) {
+      return backendFetch<QpiAIQuantumResponse>(
+        '/qpiai/quantum/simulate-cathode',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            battery_id: batteryId,
+            cathode_material: cathode,
+            state_of_health_pct: soh,
+            cycle_count: cycles,
+          }),
+        },
+        false
+      );
     }
 
-    return res;
+    return QpiAIQuantumEngine.simulateCathodeDegradation(batteryId, cathode, soh, cycles);
   },
 };

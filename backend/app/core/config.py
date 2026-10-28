@@ -27,10 +27,13 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
     
-    # Supabase Persistence
+    # Supabase Persistence & Auth
     SUPABASE_URL: str = ""
+    SUPABASE_PUBLISHABLE_KEY: str = ""
     SUPABASE_KEY: str = ""
+    SUPABASE_SECRET_KEY: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
+    SUPABASE_JWKS_URL: str = ""
     USE_MEMORY_DB: bool = True  # Automatically falls back to thread-safe memory DB if credentials absent
     
     # QpiAI Integrations (Teammate 4 modules)

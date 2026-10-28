@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Building2, 
   MapPin, 
@@ -17,10 +17,14 @@ import { Organization, UserRole } from '../types';
 import { api } from '../services/api';
 
 export const Organizations: React.FC = () => {
-  const [organizations] = useState<Organization[]>(api.listOrganizations());
+  const [organizations, setOrganizations] = useState<Organization[]>(api.listOrganizations());
   const [viewTab, setViewTab] = useState<'directory' | 'rbac'>('directory');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    api.fetchOrganizations().then(setOrganizations).catch(() => {});
+  }, []);
 
   const filtered = organizations.filter((org) => {
     const rawType = org.org_type || org.type || 'ENTERPRISE';

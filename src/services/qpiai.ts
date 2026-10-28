@@ -1,4 +1,15 @@
-import { QpiAIOptResponse, QpiAIQuantumResponse } from '../types';
+import type { QpiAIOptResponse, QpiAIQuantumResponse } from '../types/index.ts';
+
+function readQpiEnv(serverKey: string): string {
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env[serverKey]) {
+      return String(process.env[serverKey]).trim();
+    }
+  } catch {
+    // ignore in browser
+  }
+  return '';
+}
 
 export class QpiAIOptEngine {
   /**
@@ -102,8 +113,8 @@ export class QpiAIOptEngine {
       sampleMatrix[k] = quboDict[k];
     }
 
-    // Check if cloud solver key is configured in env
-    const apiKey = (import.meta.env.VITE_QPIAI_OPT_API_KEY as string | undefined)?.trim();
+    // Check if cloud solver key is configured in server environment
+    const apiKey = readQpiEnv('QPIAI_OPT_API_KEY');
     if (!apiKey) {
       return {
         status: 'NOT_CONFIGURED',
@@ -116,11 +127,11 @@ export class QpiAIOptEngine {
         recommended_allocations: null,
         execution_time_seconds: null,
         job_id: null,
-        message: 'QpiAI-Opt API credentials are not configured. The QUBO optimization formulation was mathematically generated and validated using qpiai-opt-api data structures.',
+        message: 'QpiAI-Opt API credentials are not configured on the backend. The QUBO optimization formulation was mathematically generated and validated using qpiai-opt-api data structures.',
         instructions:
           'To execute on the live QpiAI-Opt Cloud Solver:\n' +
           '1. Register at https://qpiai.tech and obtain your QpiAI-Opt API key.\n' +
-          '2. Set VITE_QPIAI_OPT_API_KEY in your .env file.\n' +
+          '2. Set QPIAI_OPT_API_KEY in your server environment (.env).\n' +
           '3. Re-run this endpoint to receive live cloud solver results.',
       };
     }
@@ -172,7 +183,7 @@ export class QpiAIQuantumEngine {
       MEASURE: 4,
     };
 
-    const apiKey = (import.meta.env.VITE_QPIAI_QUANTUM_API_KEY as string | undefined)?.trim();
+    const apiKey = readQpiEnv('QPIAI_QUANTUM_API_KEY');
 
     if (!apiKey) {
       return {
@@ -197,7 +208,7 @@ export class QpiAIQuantumEngine {
         instructions:
           'To execute on the live QpiAI QCloud or Indus-1 Quantum Computer:\n' +
           '1. Obtain your API key from the QpiAI Quantum Portal (https://qpiai.tech).\n' +
-          '2. Set VITE_QPIAI_QUANTUM_API_KEY in your .env file.\n' +
+          '2. Set QPIAI_QUANTUM_API_KEY in your server environment (.env).\n' +
           '3. Set QPIAI_QUANTUM_BACKEND to "QpiAI-Indus-1" for physical hardware or "QpiAI-QSV-Simulator" for cloud simulator.',
       };
     }

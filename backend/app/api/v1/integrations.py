@@ -20,11 +20,11 @@ async def get_integrations_status():
         status="CONNECTED" if has_supabase and not settings.USE_MEMORY_DB else "OPERATIONAL (In-Memory Fallback)",
         configured=has_supabase,
         details={
-            "database_url_configured": bool(settings.SUPABASE_URL),
-            "service_role_key_configured": bool(settings.SUPABASE_SERVICE_ROLE_KEY),
-            "thread_safe_memory_store_active": True,
-            "rls_enforced": True
-        }
+    "database_url_configured": bool(settings.SUPABASE_URL),
+    "service_role_key_configured": bool(settings.SUPABASE_SERVICE_ROLE_KEY),
+    "thread_safe_memory_store_active": settings.USE_MEMORY_DB or not has_supabase,
+    "rls_enforced": True
+}
     )
 
     # QpiAI Opt status

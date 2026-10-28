@@ -14,11 +14,16 @@ def get_supabase_client():
     global _supabase_client
     if _supabase_client is not None:
         return _supabase_client
-    if settings.SUPABASE_URL and (settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_KEY):
+    active_key = (
+        settings.SUPABASE_SECRET_KEY
+        or settings.SUPABASE_SERVICE_ROLE_KEY
+        or settings.SUPABASE_PUBLISHABLE_KEY
+        or settings.SUPABASE_KEY
+    )
+    if settings.SUPABASE_URL and active_key:
         try:
             from supabase import create_client
-            key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_KEY
-            _supabase_client = create_client(settings.SUPABASE_URL, key)
+            _supabase_client = create_client(settings.SUPABASE_URL, active_key)
             logger.info("Successfully initialized production Supabase PostgreSQL client.")
             return _supabase_client
         except Exception as e:
