@@ -8,11 +8,7 @@ interface PassportCardProps {
   onShowQr: (id: string) => void;
 }
 
-export const PassportCard: React.FC<PassportCardProps> = ({
-  passport,
-  onSelect,
-  onShowQr,
-}) => {
+export const PassportCard: React.FC<PassportCardProps> = ({ passport, onSelect, onShowQr }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'IN_SERVICE':
@@ -43,12 +39,8 @@ export const PassportCard: React.FC<PassportCardProps> = ({
           <span className="font-mono text-xs px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 text-emerald-400 font-bold">
             {passport.battery_id}
           </span>
-          <span
-            className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${getStatusColor(
-              passport.status
-            )}`}
-          >
-            {passport.status.replace(/_/g, ' ')}
+          <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${getStatusColor(passport.status)}`}>
+            {passport.status.replace('_', ' ')}
           </span>
         </div>
 
@@ -65,11 +57,7 @@ export const PassportCard: React.FC<PassportCardProps> = ({
               <Zap className="w-3 h-3 text-amber-400" />
               <span>State of Health</span>
             </div>
-            <div
-              className={`text-lg font-bold font-mono ${getSoHColor(
-                passport.state_of_health_pct
-              )}`}
-            >
+            <div className={`text-lg font-bold font-mono ${getSoHColor(passport.state_of_health_pct)}`}>
               {passport.state_of_health_pct}%
             </div>
           </div>
@@ -95,7 +83,7 @@ export const PassportCard: React.FC<PassportCardProps> = ({
       <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
         <button
           onClick={() => onShowQr(passport.battery_id)}
-          className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 border border-slate-800 transition-colors cursor-pointer"
+          className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 border border-slate-800 transition-colors"
           title="View Verification QR Code"
         >
           <QrCode className="w-4 h-4" />
@@ -103,7 +91,7 @@ export const PassportCard: React.FC<PassportCardProps> = ({
 
         <button
           onClick={() => onSelect(passport.battery_id)}
-          className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all cursor-pointer"
+          className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all"
         >
           <span>View Passport</span>
           <ArrowRight className="w-3.5 h-3.5" />

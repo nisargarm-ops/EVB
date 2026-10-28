@@ -1,28 +1,46 @@
-export type UserRole =
+export type UserRole = 
   | 'MANUFACTURER'
   | 'OEM'
   | 'FLEET_OPERATOR'
+  | 'SERVICE_CENTER'
+  | 'REMANUFACTURER'
   | 'RECYCLER'
   | 'REGULATOR_AUDITOR'
+  | 'ADMINISTRATOR'
   | 'PUBLIC';
 
-export type LifecycleStatus =
-  | 'MANUFACTURED'
-  | 'IN_SERVICE'
-  | 'SECOND_LIFE'
-  | 'END_OF_LIFE'
-  | 'RECYCLED';
+export interface UserProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  organization_id: string;
+  organization_name: string;
+}
 
-export type CustodyEventType =
-  | 'MANUFACTURED'
-  | 'OEM_ASSEMBLED'
-  | 'REGISTERED_FLEET'
-  | 'MAINTENANCE_LOGGED'
-  | 'TELEMETRY_UPDATED'
-  | 'TRANSFERRED_CUSTODY'
-  | 'SECOND_LIFE_ASSIGNED'
-  | 'DECOMMISSIONED'
-  | 'RECYCLED';
+export type OrganizationType = 
+  | 'MANUFACTURER'
+  | 'OEM'
+  | 'FLEET_OPERATOR'
+  | 'SERVICE_CENTER'
+  | 'REMANUFACTURER'
+  | 'RECYCLER'
+  | 'REGULATOR_AUDITOR'
+  | 'ADMINISTRATOR';
+
+export interface Organization {
+  id: string;
+  name: string;
+  org_type: string;
+  type?: OrganizationType | string;
+  registration_number: string;
+  country: string;
+  facility_location: string;
+  facility_id?: string;
+  contact_email: string;
+  is_verified: boolean;
+  created_at: string;
+}
 
 export interface TechnicalSpecs {
   rated_capacity_kwh: number;
@@ -59,6 +77,7 @@ export interface HealthState {
 }
 
 export interface BatteryPassport {
+  id?: string;
   battery_did: string;
   battery_id: string;
   serial_number: string;
@@ -68,7 +87,7 @@ export interface BatteryPassport {
   manufacturing_date: string;
   manufacturing_country: string;
   manufacturing_facility: string;
-  status: LifecycleStatus;
+  status: 'MANUFACTURED' | 'IN_SERVICE' | 'MAINTENANCE' | 'SECOND_LIFE' | 'END_OF_LIFE' | 'RECYCLED' | 'DECOMMISSIONED';
   current_custodian: string;
   current_vehicle_vin?: string | null;
   technical_specs: TechnicalSpecs;
@@ -105,6 +124,44 @@ export interface CustodyEvent {
   payload: Record<string, any>;
   prev_hash: string;
   hash: string;
+}
+
+export interface CustodyTransfer {
+  id: string;
+  battery_id: string;
+  sender_org_id: string;
+  sender_org_name: string;
+  receiver_org_id: string;
+  receiver_org_name: string;
+  sender_actor_id?: string | null;
+  receiver_actor_id?: string | null;
+  state: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+  transfer_type: string;
+  notes?: string | null;
+  rejection_reason?: string | null;
+  initiated_at: string;
+  responded_at?: string | null;
+}
+
+export interface DispositionDecision {
+  id: string;
+  battery_id: string;
+  recommendation: 'STATIONARY_BESS' | 'CELL_RECONDITIONING' | 'DEEP_RECYCLING' | 'CONTINUE_IN_SERVICE' | 'DECOMMISSION';
+  recommended_pathway: string;
+  recommended_action?: string;
+  score?: number;
+  is_second_life_suitable?: boolean;
+  target_application?: string;
+  estimated_remaining_useful_life_years?: number;
+  recycling_efficiency_pct?: number;
+  constraints: Record<string, any>;
+  constraints_evaluated?: Record<string, any>;
+  explanation: string;
+  approval_status: 'PROPOSED' | 'APPROVED' | 'REJECTED' | 'EXECUTED';
+  decided_by?: string | null;
+  decided_at: string;
+  approved_by?: string | null;
+  approved_at?: string | null;
 }
 
 export interface AuditVerification {
@@ -165,142 +222,11 @@ export interface QpiAIQuantumResponse {
   instructions?: string | null;
 }
 
-// Structured QpiAI Opt & QCloud contracts
-export type IntegrationHealthState =
-  | 'configured_and_reachable'
-  | 'configured_but_unavailable'
-  | 'missing_credentials'
-  | 'simulator_only'
-  | 'demo_mode'
-  | 'execution_error';
-
-export type DispositionPathway =
-  | 'direct_reuse'
-  | 'second_life_bess'
-  | 'remanufacturing'
-  | 'material_recycling';
-
-export type PredefinedQuantumExperiment =
-  | 'telemetry_anomaly_ising'
-  | 'toy_disposition_ising_2pack'
-  | 'bell_calibration_check';
-
-export type SupportedQpiAIBackend =
-  | 'QpiAI-QSV-Local'
-  | 'QpiAI-QSV-Simulator'
-  | 'QpiAI-QDM-Simulator'
-  | 'QpiAI-QTN-Simulator'
-  | 'QpiAI-Indus-1';
-
-export interface ServiceIntegrationStatus {
-  service_name: string;
-  status: IntegrationHealthState;
-  sdk_package: string;
-  sdk_installed: boolean;
-  credentials_configured: boolean;
-  endpoint_url: string;
-  active_execution_mode: string;
-  supported_backends?: readonly string[];
-  diagnostic_message: string;
-  setup_instructions: string[];
-}
-
-export interface IntegrationsStatusResponse {
-  checked_at: string;
-  overall_summary: string;
-  qpiai_opt: ServiceIntegrationStatus;
-  qpiai_qcloud: ServiceIntegrationStatus;
-}
-
-export interface PathwayEligibilityDetail {
-  pathway: DispositionPathway;
-  eligible: boolean;
-  rule_category: 'authoritative_safety_or_lifecycle' | 'configurable_demo_threshold' | 'eligible';
-  reasons: string[];
-  estimated_net_value_eur: number;
-  estimated_net_co2_kg: number;
-  linear_objective_score: number;
-}
-
-export interface BatteryAllocationDecision {
-  battery_id: string;
-  selected_pathway: DispositionPathway | null;
-  estimated_net_value_eur: number | null;
-  estimated_net_co2_kg: number | null;
-  available_energy_kwh: number;
-  rationale: string;
-  pathway_evaluations: PathwayEligibilityDetail[];
-}
-
-export interface ConstraintSummaryItem {
-  constraint_id: string;
-  category: 'hard_authoritative' | 'hard_capacity' | 'configurable_eligibility';
-  description: string;
-  satisfied: boolean;
-  details: string;
-}
-
-export interface OptimizationRunResponse {
-  solver_status: string;
-  solver_name: string;
-  execution_mode: string;
-  is_demo: boolean;
-  is_live_qpiai_execution: boolean;
-  objective_value: number | null;
-  qubo_metadata: {
-    problem_type: 'QUBO';
-    num_binary_variables: number;
-    num_qubo_edges: number;
-    penalty_multiplier: number;
-    sample_edges: Record<string, number>;
-  };
-  allocations: BatteryAllocationDecision[];
-  constraints_considered: ConstraintSummaryItem[];
-  assumptions_and_weights: {
-    objective_weights: {
-      economic_value_weight: number;
-      carbon_impact_weight: number;
-      degradation_risk_weight: number;
-    };
-    configurable_demo_thresholds: Record<string, number>;
-    methodology_notes: string[];
-  };
-  data_completeness: {
-    overall_completeness_pct: number;
-    complete_batteries_count: number;
-    total_batteries_count: number;
-    missing_or_imputed_fields: Record<string, string[]>;
-    warnings: string[];
-  };
-  execution_time_ms: number | null;
-  job_id: string | null;
+export interface DatabaseStatus {
+  isConfigured: boolean;
+  isConnected: boolean;
+  provider: 'SUPABASE' | 'MEMORY_FALLBACK';
   message: string;
-}
-
-export interface QuantumRunResponse {
-  execution_status: string;
-  experiment_type: PredefinedQuantumExperiment;
-  experiment_title: string;
-  scientific_purpose_and_limits: string;
-  variable_encoding_map: Record<string, string>;
-  backend_requested: string;
-  backend_used: string | null;
-  execution_mode: string;
-  is_simulated: boolean;
-  is_cloud_execution: boolean;
-  is_demo: boolean;
-  circuit_summary: {
-    num_qubits: number;
-    num_clbits: number;
-    circuit_depth: number;
-    gate_counts: Record<string, number>;
-    rotation_angles_rad: Record<string, number>;
-  };
-  shots_requested: number;
-  measurement_counts: Record<string, number> | null;
-  measurement_probabilities: Record<string, number> | null;
-  device_metadata: Record<string, any> | null;
-  execution_time_ms: number | null;
-  job_id: string | null;
-  message: string;
+  endpointUrl?: string;
+  lastChecked?: string;
 }

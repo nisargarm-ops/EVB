@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import {
-  ShieldCheck,
-  CheckCircle2,
-  Search,
-  Award,
-  AlertTriangle,
+import { 
+  ShieldCheck, 
+  CheckCircle2, 
+  Search, 
+  Award, 
+  AlertTriangle 
 } from 'lucide-react';
 import { PublicVerification } from '../types';
 import { api } from '../services/api';
@@ -14,10 +14,7 @@ interface VerifyPublicProps {
   onNavigateDetail: (id: string) => void;
 }
 
-export const VerifyPublic: React.FC<VerifyPublicProps> = ({
-  initialId,
-  onNavigateDetail,
-}) => {
+export const VerifyPublic: React.FC<VerifyPublicProps> = ({ initialId, onNavigateDetail }) => {
   const [searchId, setSearchId] = useState(initialId || 'BAT-NMC-8A2F91C0');
   const [result, setResult] = useState<PublicVerification | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,11 +51,9 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
         <div className="inline-flex p-3 rounded-2xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 border border-emerald-500/40 text-emerald-400">
           <ShieldCheck className="w-8 h-8" />
         </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
-          Public EV Battery Verification Portal
-        </h1>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-white">Public EV Battery Verification Portal</h1>
         <p className="text-xs sm:text-sm text-slate-400 max-w-lg mx-auto">
-          Scan or enter any European Union Battery Passport ID to verify official authenticity,
+          Scan or enter any European Union Battery Passport ID to verify official authenticity, 
           tamper-evident custody integrity, and state of health.
         </p>
 
@@ -77,7 +72,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
             <button
               onClick={() => handleVerify(searchId)}
               disabled={loading}
-              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50"
             >
               {loading ? 'Verifying...' : 'Verify'}
             </button>
@@ -110,12 +105,10 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
                 </span>
               </div>
               <h2 className="text-xl font-extrabold text-white mt-1">{result.battery_id}</h2>
-              <p className="text-[11px] font-mono text-slate-400 mt-0.5 break-all">
-                {result.battery_did}
-              </p>
+              <p className="text-[11px] font-mono text-slate-400 mt-0.5">{result.battery_did}</p>
             </div>
 
-            <div className="text-left sm:text-right">
+            <div className="text-right">
               <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
                 EU 2023/1542 Compliant
               </span>
@@ -129,9 +122,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-6">
             <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
               <div className="text-[11px] text-slate-500">Manufacturer</div>
-              <div className="text-xs font-bold text-slate-100 mt-1">
-                {result.manufacturer_name}
-              </div>
+              <div className="text-xs font-bold text-slate-100 mt-1">{result.manufacturer_name}</div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
@@ -141,39 +132,32 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
 
             <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
               <div className="text-[11px] text-slate-500">State of Health (SoH)</div>
-              <div className="text-xs font-bold text-emerald-400 mt-1">
-                {result.state_of_health_pct}%
-              </div>
+              <div className="text-xs font-bold text-emerald-400 mt-1">{result.state_of_health_pct}%</div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
               <div className="text-[11px] text-slate-500">Carbon Footprint</div>
-              <div className="text-xs font-bold text-cyan-400 mt-1">
-                {result.carbon_footprint_total} kg CO₂e
-              </div>
+              <div className="text-xs font-bold text-cyan-400 mt-1">{result.carbon_footprint_total} kg CO₂e</div>
             </div>
           </div>
 
           {/* Tamper Evidence Seal */}
-          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div className="text-xs">
-                <div className="font-bold text-emerald-300">
-                  Cryptographic Hash Chain Verified
-                </div>
+                <div className="font-bold text-emerald-300">Cryptographic Hash Chain Verified</div>
                 <div className="text-slate-400 mt-0.5">
-                  All {result.total_custody_events} lifecycle custody blocks match mathematical
-                  SHA-256 digests.
+                  All {result.total_custody_events} lifecycle custody blocks match mathematical SHA-256 digests.
                 </div>
               </div>
             </div>
 
             <button
               onClick={() => onNavigateDetail(result.battery_id)}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all"
             >
               Full Passport
             </button>

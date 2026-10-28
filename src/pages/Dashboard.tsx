@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import {
-  BatteryCharging,
-  Leaf,
-  Recycle,
-  Activity,
-  ShieldCheck,
-  Filter,
-  PlusCircle,
-  Cpu,
-  AlertCircle,
+import { 
+  BatteryCharging, 
+  Leaf, 
+  Recycle, 
+  Activity, 
+  ShieldCheck, 
+  Filter, 
+  PlusCircle, 
+  Cpu, 
+  AlertCircle 
 } from 'lucide-react';
 import { PassportSummary, UserRole } from '../types';
 import { api } from '../services/api';
@@ -27,7 +27,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onShowQr,
   onNavigateCreate,
   onNavigateQpiAI,
-  activeRole,
+  activeRole
 }) => {
   const [passports, setPassports] = useState<PassportSummary[]>([]);
   const [filter, setFilter] = useState<string>('ALL');
@@ -53,12 +53,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Aggregate Metrics
   const totalBatteries = passports.length;
-  const avgSoH =
-    totalBatteries > 0
-      ? (
-          passports.reduce((acc, p) => acc + p.state_of_health_pct, 0) / totalBatteries
-        ).toFixed(1)
-      : '0';
+  const avgSoH = totalBatteries > 0
+    ? (passports.reduce((acc, p) => acc + p.state_of_health_pct, 0) / totalBatteries).toFixed(1)
+    : '0';
   const secondLifeCount = passports.filter(p => p.status === 'SECOND_LIFE').length;
   const inServiceCount = passports.filter(p => p.status === 'IN_SERVICE').length;
 
@@ -76,19 +73,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
             Cross-Enterprise EV Battery Passport & Lifecycle Metrology
           </h1>
           <p className="mt-3 text-slate-300 text-sm sm:text-base leading-relaxed">
-            Cryptographically anchored battery passports tracking State of Health, carbon footprint,
-            and custody transitions across Manufacturers, OEMs, Fleets, and Circular Recyclers.
-            Integrated with <span className="text-cyan-400 font-semibold">QpiAI Opt</span> for
-            reverse logistics and{' '}
-            <span className="text-emerald-400 font-semibold">QpiAI Quantum</span> for degradation
-            simulation.
+            Cryptographically anchored battery passports tracking State of Health, carbon footprint, 
+            and custody transitions across Manufacturers, OEMs, Fleets, and Circular Recyclers. 
+            Integrated with <span className="text-cyan-400 font-semibold">QpiAI Opt</span> for reverse logistics and <span className="text-emerald-400 font-semibold">QpiAI Quantum</span> for degradation simulation.
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3">
             {activeRole === 'MANUFACTURER' && (
               <button
                 onClick={onNavigateCreate}
-                className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+                className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all"
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>Mint New Battery Passport</span>
@@ -97,7 +91,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
             <button
               onClick={onNavigateQpiAI}
-              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-all cursor-pointer"
+              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-all"
             >
               <Cpu className="w-4 h-4 text-cyan-400" />
               <span>Launch QpiAI Optimization Studio</span>
@@ -149,27 +143,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
         <div className="flex items-center space-x-2">
           <Filter className="w-4 h-4 text-slate-400" />
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-            Lifecycle Status:
-          </span>
+          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Lifecycle Status:</span>
         </div>
 
         <div className="flex flex-wrap gap-1.5 p-1 rounded-xl bg-slate-900 border border-slate-800">
-          {['ALL', 'MANUFACTURED', 'IN_SERVICE', 'SECOND_LIFE', 'END_OF_LIFE', 'RECYCLED'].map(
-            tab => (
-              <button
-                key={tab}
-                onClick={() => setFilter(tab)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  filter === tab
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {tab.replace(/_/g, ' ')}
-              </button>
-            )
-          )}
+          {['ALL', 'IN_SERVICE', 'SECOND_LIFE', 'END_OF_LIFE', 'RECYCLED'].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setFilter(tab)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                filter === tab
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {tab.replace(/_/g, ' ')}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -188,14 +178,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       ) : passports.length === 0 ? (
         <div className="text-center py-16 glass-panel rounded-3xl border border-slate-800">
-          <p className="text-sm text-slate-400">
-            No battery passports found matching this filter.
-          </p>
+          <p className="text-sm text-slate-400">No battery passports found matching this filter.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {passports.map(p => (
-            <PassportCard
+            <PassportCard 
               key={p.battery_id}
               passport={p}
               onSelect={onSelectPassport}
