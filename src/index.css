@@ -3,23 +3,24 @@
 @tailwind utilities;
 
 :root {
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color-scheme: dark;
-  background-color: #090D16;
+  background-color: #070B14;
   color: #F1F5F9;
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: #090D16;
+  background-color: #070B14;
   color: #F1F5F9;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-code, pre {
-  font-family: 'JetBrains Mono', monospace;
+code, pre, .font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 /* Custom Scrollbar */
@@ -28,37 +29,110 @@ code, pre {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0F172A;
+  background: #090D18;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
+  background: #1E293B;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #334155;
+}
+
+/* Subtle Futuristic Cyber Grid */
+.bg-cyber-grid {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+.bg-radial-ambient {
+  background: radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.09) 0%, rgba(16, 185, 129, 0.04) 40%, transparent 75%);
 }
 
 /* Glassmorphism Classes */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.75);
+  background: rgba(13, 19, 33, 0.75);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-card {
+  background: rgba(15, 23, 42, 0.65);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  border-color: rgba(6, 182, 212, 0.3);
+  box-shadow: 0 4px 20px -2px rgba(6, 182, 212, 0.08);
 }
 
 .glass-panel-glow {
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.15);
+  background: rgba(11, 18, 32, 0.88);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  box-shadow: 0 0 30px -5px rgba(16, 185, 129, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-/* Utility Animations */
+.glass-panel-cyan {
+  background: rgba(11, 18, 32, 0.88);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+  box-shadow: 0 0 30px -5px rgba(6, 182, 212, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Flowing energy animation */
+@keyframes energy-flow {
+  0% { stroke-dashoffset: 40; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.animate-energy-flow {
+  animation: energy-flow 1.8s linear infinite;
+}
+
 @keyframes pulse-subtle {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(0.99); }
+  50% { opacity: 0.88; transform: scale(0.995); }
 }
 
 .animate-pulse-subtle {
-  animation: pulse-subtle 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: pulse-subtle 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes radar-sweep {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-radar {
+  animation: radar-sweep 20s linear infinite;
+}
+
+/* Accessibility: Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Focus Visible Accessibility */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid #06B6D4;
+  outline-offset: 2px;
 }

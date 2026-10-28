@@ -275,30 +275,43 @@ export const CustodyTransfers: React.FC<CustodyTransfersProps> = ({
                 className="glass-panel p-5 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all space-y-4"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-                  <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2 text-xs">
                     <span
                       onClick={() => onNavigateDetail(t.battery_id)}
                       className="font-mono font-bold text-sm text-cyan-400 hover:underline cursor-pointer"
                     >
                       {t.battery_id}
                     </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-medium">
+                    <span className="text-slate-500">·</span>
+                    <span className="text-slate-400 font-mono text-[11px]">
                       {t.transfer_type.replace(/_/g, ' ')}
                     </span>
                   </div>
 
-                  <div className="flex items-center space-x-2">
-                    <span
-                      className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
-                        isAccepted
-                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                          : isRejected
-                          ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-                          : 'bg-amber-500/15 text-amber-400 border-amber-500/30 animate-pulse'
-                      }`}
-                    >
-                      {t.state}
-                    </span>
+                  <div className="flex items-center space-x-3 text-xs">
+                    <div className="flex items-center space-x-1.5 font-semibold">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          isAccepted
+                            ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                            : isRejected
+                            ? 'bg-rose-400 shadow-sm shadow-rose-400/50'
+                            : 'bg-amber-400 animate-pulse shadow-sm shadow-amber-400/50'
+                        }`}
+                      />
+                      <span
+                        className={
+                          isAccepted
+                            ? 'text-emerald-400'
+                            : isRejected
+                            ? 'text-rose-400'
+                            : 'text-amber-400'
+                        }
+                      >
+                        {t.state}
+                      </span>
+                    </div>
+                    <span className="text-slate-600">·</span>
                     <span className="text-[11px] text-slate-500 font-mono">
                       {new Date(t.initiated_at).toLocaleDateString()} {new Date(t.initiated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>

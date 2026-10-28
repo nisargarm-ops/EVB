@@ -1,5 +1,5 @@
 import React from 'react';
-import { QrCode, ArrowRight, Zap, Leaf } from 'lucide-react';
+import { QrCode, ArrowRight, Zap, Leaf, ShieldCheck } from 'lucide-react';
 import { PassportSummary } from '../types';
 
 interface PassportCardProps {
@@ -9,18 +9,18 @@ interface PassportCardProps {
 }
 
 export const PassportCard: React.FC<PassportCardProps> = ({ passport, onSelect, onShowQr }) => {
-  const getStatusColor = (status: string) => {
+  const getStatusDot = (status: string) => {
     switch (status) {
       case 'IN_SERVICE':
-        return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
+        return 'bg-emerald-400 shadow-[0_0_8px_#10B981]';
       case 'SECOND_LIFE':
-        return 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30';
+        return 'bg-cyan-400 shadow-[0_0_8px_#06B6D4]';
       case 'END_OF_LIFE':
-        return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
+        return 'bg-amber-400 shadow-[0_0_8px_#F59E0B]';
       case 'RECYCLED':
-        return 'text-purple-400 bg-purple-500/10 border-purple-500/30';
+        return 'bg-purple-400 shadow-[0_0_8px_#A855F7]';
       default:
-        return 'text-blue-400 bg-blue-500/10 border-blue-500/30';
+        return 'bg-blue-400 shadow-[0_0_8px_#3B82F6]';
     }
   };
 
@@ -32,69 +32,81 @@ export const PassportCard: React.FC<PassportCardProps> = ({ passport, onSelect, 
   };
 
   return (
-    <div className="glass-panel hover:border-slate-700/80 transition-all rounded-2xl p-5 flex flex-col justify-between group shadow-lg hover:shadow-emerald-500/5">
+    <div className="glass-card rounded-2xl p-5 flex flex-col justify-between group relative overflow-hidden">
       <div>
-        {/* Header Badges */}
-        <div className="flex items-center justify-between mb-3">
-          <span className="font-mono text-xs px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 text-emerald-400 font-bold">
+        {/* Top Header: Unboxed metadata with typographic separators */}
+        <div className="flex items-center justify-between text-xs mb-3">
+          <span className="font-mono font-bold text-emerald-400 tracking-wide">
             {passport.battery_id}
           </span>
-          <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${getStatusColor(passport.status)}`}>
-            {passport.status.replace('_', ' ')}
-          </span>
+
+          <div className="flex items-center space-x-1.5 text-[11px] font-medium text-slate-300">
+            <span className={`w-2 h-2 rounded-full ${getStatusDot(passport.status)}`} />
+            <span>{passport.status.replace('_', ' ')}</span>
+          </div>
         </div>
 
-        {/* Model & Manufacturer */}
-        <h3 className="font-bold text-base text-slate-100 group-hover:text-emerald-300 transition-colors">
-          {passport.chemistry} EV Battery Pack
+        {/* Model & Chemistry Title */}
+        <h3 className="font-bold text-base text-white group-hover:text-cyan-300 transition-colors">
+          {passport.chemistry} EV Pack
         </h3>
-        <p className="text-xs text-slate-400 mb-4">{passport.manufacturer_name}</p>
+        <div className="text-xs text-slate-400 flex items-center space-x-2 mt-0.5 mb-4">
+          <span>{passport.manufacturer_name}</span>
+          <span aria-hidden="true">·</span>
+          <span className="font-mono text-[11px] text-slate-500">EU Cirpass</span>
+        </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 mb-4">
-          <div>
-            <div className="text-[11px] text-slate-500 flex items-center space-x-1">
-              <Zap className="w-3 h-3 text-amber-400" />
-              <span>State of Health</span>
-            </div>
-            <div className={`text-lg font-bold font-mono ${getSoHColor(passport.state_of_health_pct)}`}>
+        {/* State of Health & Capacity Progress Meter */}
+        <div className="p-3.5 rounded-xl bg-slate-900/70 border border-slate-800/80 mb-4 space-y-2.5">
+          <div className="flex items-center justify-between text-xs font-mono">
+            <span className="text-slate-400 flex items-center space-x-1">
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>Health (SoH)</span>
+            </span>
+            <span className={`font-bold text-sm ${getSoHColor(passport.state_of_health_pct)}`}>
               {passport.state_of_health_pct}%
-            </div>
+            </span>
           </div>
-          <div>
-            <div className="text-[11px] text-slate-500 flex items-center space-x-1">
+
+          <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden p-0.5 border border-slate-800">
+            <div
+              className="bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 h-full rounded-full transition-all duration-700"
+              style={{ width: `${passport.state_of_health_pct}%` }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1 border-t border-slate-800/60">
+            <span className="flex items-center space-x-1">
               <Leaf className="w-3 h-3 text-emerald-400" />
               <span>Rated Capacity</span>
-            </div>
-            <div className="text-lg font-bold font-mono text-slate-200">
-              {passport.rated_capacity_kwh} kWh
-            </div>
+            </span>
+            <span className="text-slate-200 font-bold">{passport.rated_capacity_kwh} kWh</span>
           </div>
         </div>
 
-        {/* Custodian */}
-        <div className="text-xs text-slate-400 mb-4 truncate">
-          <span className="text-slate-500">Custodian: </span>
-          <span className="text-slate-300 font-medium">{passport.current_custodian}</span>
+        {/* Custodian details */}
+        <div className="text-xs text-slate-400 truncate mb-4 flex items-center space-x-1.5">
+          <span className="text-slate-500">Custodian:</span>
+          <span className="text-slate-200 font-medium truncate">{passport.current_custodian}</span>
         </div>
       </div>
 
       {/* Action Footer */}
-      <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
+      <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
         <button
           onClick={() => onShowQr(passport.battery_id)}
-          className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 border border-slate-800 transition-colors"
-          title="View Verification QR Code"
+          className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 border border-slate-800 transition-colors"
+          title="Inspect EU Digital QR Sticker"
         >
           <QrCode className="w-4 h-4" />
         </button>
 
         <button
           onClick={() => onSelect(passport.battery_id)}
-          className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all"
+          className="flex items-center space-x-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 border border-cyan-500/30 hover:border-cyan-500/50 transition-all"
         >
           <span>View Passport</span>
-          <ArrowRight className="w-3.5 h-3.5" />
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
         </button>
       </div>
     </div>
