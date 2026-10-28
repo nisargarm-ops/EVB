@@ -14,6 +14,7 @@ import {
   generateImmutableBatteryId,
   verifyChainIntegrity,
 } from './hasher';
+import { safeStorage } from './safeStorage';
 
 const STORAGE_KEY_PASSPORTS = 'bp360_passports_v2';
 const STORAGE_KEY_CUSTODY = 'bp360_custody_events_v2';
@@ -34,10 +35,10 @@ export class BatteryRepository {
   private init() {
     this.seedOrganizations();
 
-    const savedPassports = localStorage.getItem(STORAGE_KEY_PASSPORTS);
-    const savedCustody = localStorage.getItem(STORAGE_KEY_CUSTODY);
-    const savedTransfers = localStorage.getItem(STORAGE_KEY_TRANSFERS);
-    const savedDecisions = localStorage.getItem(STORAGE_KEY_DECISIONS);
+    const savedPassports = safeStorage.getItem(STORAGE_KEY_PASSPORTS);
+    const savedCustody = safeStorage.getItem(STORAGE_KEY_CUSTODY);
+    const savedTransfers = safeStorage.getItem(STORAGE_KEY_TRANSFERS);
+    const savedDecisions = safeStorage.getItem(STORAGE_KEY_DECISIONS);
 
     if (savedPassports && savedCustody) {
       try {
@@ -82,10 +83,10 @@ export class BatteryRepository {
       const dObj: Record<string, DispositionDecision> = {};
       for (const [k, v] of this.dispositionDecisions.entries()) dObj[k] = v;
 
-      localStorage.setItem(STORAGE_KEY_PASSPORTS, JSON.stringify(pObj));
-      localStorage.setItem(STORAGE_KEY_CUSTODY, JSON.stringify(cObj));
-      localStorage.setItem(STORAGE_KEY_TRANSFERS, JSON.stringify(tObj));
-      localStorage.setItem(STORAGE_KEY_DECISIONS, JSON.stringify(dObj));
+      safeStorage.setItem(STORAGE_KEY_PASSPORTS, JSON.stringify(pObj));
+      safeStorage.setItem(STORAGE_KEY_CUSTODY, JSON.stringify(cObj));
+      safeStorage.setItem(STORAGE_KEY_TRANSFERS, JSON.stringify(tObj));
+      safeStorage.setItem(STORAGE_KEY_DECISIONS, JSON.stringify(dObj));
     } catch (e) {
       console.warn('Persistence update warning', e);
     }

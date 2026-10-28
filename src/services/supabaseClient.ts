@@ -1,12 +1,13 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { safeStorage } from './safeStorage';
 
 // Environment variables
 const envUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || '';
 const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || '';
 
 // Stored manual configuration in case user inputs in UI
-const storedUrl = localStorage.getItem('bp360_supabase_url') || '';
-const storedKey = localStorage.getItem('bp360_supabase_anon_key') || '';
+const storedUrl = safeStorage.getItem('bp360_supabase_url') || '';
+const storedKey = safeStorage.getItem('bp360_supabase_anon_key') || '';
 
 const activeUrl = envUrl || storedUrl;
 const activeKey = envKey || storedKey;
@@ -30,8 +31,8 @@ export let supabase: SupabaseClient | null = isSupabaseConfigured
 
 export const updateSupabaseCredentials = (url: string, key: string) => {
   if (url && key) {
-    localStorage.setItem('bp360_supabase_url', url.trim());
-    localStorage.setItem('bp360_supabase_anon_key', key.trim());
+    safeStorage.setItem('bp360_supabase_url', url.trim());
+    safeStorage.setItem('bp360_supabase_anon_key', key.trim());
     supabase = createClient(url.trim(), key.trim(), {
       auth: {
         persistSession: true,
@@ -40,8 +41,8 @@ export const updateSupabaseCredentials = (url: string, key: string) => {
       },
     });
   } else {
-    localStorage.removeItem('bp360_supabase_url');
-    localStorage.removeItem('bp360_supabase_anon_key');
+    safeStorage.removeItem('bp360_supabase_url');
+    safeStorage.removeItem('bp360_supabase_anon_key');
     supabase = null;
   }
 };

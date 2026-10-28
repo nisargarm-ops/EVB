@@ -16,10 +16,11 @@ import {
 import { supabase, isSupabaseConfigured, getActiveSupabaseConfig, updateSupabaseCredentials } from './supabaseClient';
 import { batteryRepository } from './store';
 import { QpiAIOptEngine, QpiAIQuantumEngine } from './qpiai';
+import { safeStorage } from './safeStorage';
 
-let currentRole: UserRole = (localStorage.getItem('bp360_active_role') as UserRole) || 'MANUFACTURER';
-let currentOrg: string = localStorage.getItem('bp360_active_org') || 'QuantumVolt Gigafactory';
-let authToken: string = localStorage.getItem('bp360_token') || 'mock-jwt-token-bp360';
+let currentRole: UserRole = (safeStorage.getItem('bp360_active_role') as UserRole) || 'MANUFACTURER';
+let currentOrg: string = safeStorage.getItem('bp360_active_org') || 'QuantumVolt Gigafactory';
+let authToken: string = safeStorage.getItem('bp360_token') || 'mock-jwt-token-bp360';
 let activeUser: UserProfile | null = null;
 
 const ROLE_DEFAULT_ORGS: Record<UserRole, string> = {
@@ -36,7 +37,7 @@ const ROLE_DEFAULT_ORGS: Record<UserRole, string> = {
 
 export const setAuthToken = (token: string) => {
   authToken = token;
-  localStorage.setItem('bp360_token', token);
+  safeStorage.setItem('bp360_token', token);
 };
 
 export const getAuthToken = () => authToken;
@@ -124,8 +125,8 @@ export const api = {
         };
         currentRole = role;
         currentOrg = organizationName || ROLE_DEFAULT_ORGS[role];
-        localStorage.setItem('bp360_active_role', currentRole);
-        localStorage.setItem('bp360_active_org', currentOrg);
+        safeStorage.setItem('bp360_active_role', currentRole);
+        safeStorage.setItem('bp360_active_org', currentOrg);
       }
       return data;
     }
@@ -142,8 +143,8 @@ export const api = {
     };
     currentRole = role;
     currentOrg = organizationName || ROLE_DEFAULT_ORGS[role];
-    localStorage.setItem('bp360_active_role', currentRole);
-    localStorage.setItem('bp360_active_org', currentOrg);
+    safeStorage.setItem('bp360_active_role', currentRole);
+    safeStorage.setItem('bp360_active_org', currentOrg);
     return { user: activeUser, session: { access_token: `jwt-${role.toLowerCase()}-${Date.now()}` } };
   },
 
@@ -170,8 +171,8 @@ export const api = {
         };
         currentRole = role;
         currentOrg = org;
-        localStorage.setItem('bp360_active_role', currentRole);
-        localStorage.setItem('bp360_active_org', currentOrg);
+        safeStorage.setItem('bp360_active_role', currentRole);
+        safeStorage.setItem('bp360_active_org', currentOrg);
         if (data.session) setAuthToken(data.session.access_token);
       }
       return data;
@@ -190,8 +191,8 @@ export const api = {
     };
     currentRole = role;
     currentOrg = org;
-    localStorage.setItem('bp360_active_role', currentRole);
-    localStorage.setItem('bp360_active_org', currentOrg);
+    safeStorage.setItem('bp360_active_role', currentRole);
+    safeStorage.setItem('bp360_active_org', currentOrg);
     const token = `jwt-${role.toLowerCase()}-${Date.now()}`;
     setAuthToken(token);
     return { user: activeUser, session: { access_token: token } };
@@ -204,9 +205,9 @@ export const api = {
     activeUser = null;
     currentRole = 'PUBLIC';
     currentOrg = 'Anonymous Visitor';
-    localStorage.removeItem('bp360_token');
-    localStorage.setItem('bp360_active_role', 'PUBLIC');
-    localStorage.setItem('bp360_active_org', 'Anonymous Visitor');
+    safeStorage.removeItem('bp360_token');
+    safeStorage.setItem('bp360_active_role', 'PUBLIC');
+    safeStorage.setItem('bp360_active_org', 'Anonymous Visitor');
   },
 
   async resetPassword(email: string) {
@@ -234,8 +235,8 @@ export const api = {
   async switchRole(role: UserRole, organization?: string) {
     currentRole = role;
     currentOrg = organization || ROLE_DEFAULT_ORGS[role] || 'Unknown Organization';
-    localStorage.setItem('bp360_active_role', currentRole);
-    localStorage.setItem('bp360_active_org', currentOrg);
+    safeStorage.setItem('bp360_active_role', currentRole);
+    safeStorage.setItem('bp360_active_org', currentOrg);
     const mockToken = `jwt-${role.toLowerCase()}-${Date.now()}`;
     setAuthToken(mockToken);
     activeUser = {

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { DatabaseStatus } from '../types';
 import { api } from '../services/api';
+import { safeStorage } from '../services/safeStorage';
 
 interface DatabaseStatusModalProps {
   isOpen: boolean;
@@ -48,8 +49,8 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       checkStatus();
-      const storedUrl = localStorage.getItem('bp360_supabase_url') || '';
-      const storedKey = localStorage.getItem('bp360_supabase_key') || '';
+      const storedUrl = safeStorage.getItem('bp360_supabase_url') || '';
+      const storedKey = safeStorage.getItem('bp360_supabase_key') || '';
       setCustomUrl(storedUrl);
       setCustomKey(storedKey);
     }
@@ -60,7 +61,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
   const handleSaveCredentials = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customUrl.trim() || !customKey.trim()) {
-      alert('Please enter both Supabase Project URL and Anon API key.');
+      setSavedMsg('Please enter both Supabase Project URL and Anon API key.');
       return;
     }
     api.setSupabaseCredentials(customUrl.trim(), customKey.trim());

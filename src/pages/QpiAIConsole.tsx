@@ -25,14 +25,16 @@ export const QpiAIConsole: React.FC<QpiAIConsoleProps> = () => {
   const [simCycles, setSimCycles] = useState(420);
   const [quantumResult, setQuantumResult] = useState<QpiAIQuantumResponse | null>(null);
   const [quantumLoading, setQuantumLoading] = useState(false);
+  const [consoleError, setConsoleError] = useState<string | null>(null);
 
   const handleRunOpt = async () => {
     setOptLoading(true);
+    setConsoleError(null);
     try {
       const res = await api.runQpiAIOpt(selectedBatteries);
       setOptResult(res);
     } catch (err: any) {
-      alert(err.message || 'Optimization request failed');
+      setConsoleError(err.message || 'Optimization request failed');
     } finally {
       setOptLoading(false);
     }
@@ -40,11 +42,12 @@ export const QpiAIConsole: React.FC<QpiAIConsoleProps> = () => {
 
   const handleRunQuantum = async () => {
     setQuantumLoading(true);
+    setConsoleError(null);
     try {
       const res = await api.runQpiAIQuantum('BAT-NMC-8A2F91C0', cathode, simSoH, simCycles);
       setQuantumResult(res);
     } catch (err: any) {
-      alert(err.message || 'Quantum simulation request failed');
+      setConsoleError(err.message || 'Quantum simulation request failed');
     } finally {
       setQuantumLoading(false);
     }
@@ -52,6 +55,12 @@ export const QpiAIConsole: React.FC<QpiAIConsoleProps> = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+      {consoleError && (
+        <div className="p-4 rounded-xl border bg-rose-500/10 border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center justify-between">
+          <span>{consoleError}</span>
+          <button onClick={() => setConsoleError(null)} className="text-slate-400 hover:text-white ml-4">✕</button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>

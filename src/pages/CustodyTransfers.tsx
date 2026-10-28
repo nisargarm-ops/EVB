@@ -49,6 +49,7 @@ export const CustodyTransfers: React.FC<CustodyTransfersProps> = ({
   // Reject Modal state
   const [rejectingTransferId, setRejectingTransferId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [actionNotice, setActionNotice] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -95,8 +96,9 @@ export const CustodyTransfers: React.FC<CustodyTransfersProps> = ({
       setShowInitiateModal(false);
       setTransferNotes('');
       await loadData();
+      setActionNotice({ message: 'Custody transfer manifest created successfully.', type: 'success' });
     } catch (err: any) {
-      alert(err.message || 'Failed to initiate transfer');
+      setActionNotice({ message: err.message || 'Failed to initiate transfer', type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -111,8 +113,9 @@ export const CustodyTransfers: React.FC<CustodyTransfersProps> = ({
       setAcceptingTransferId(null);
       setAcceptNotes('');
       await loadData();
+      setActionNotice({ message: 'Custody transfer accepted and committed to hash chain.', type: 'success' });
     } catch (err: any) {
-      alert(err.message || 'Failed to accept transfer');
+      setActionNotice({ message: err.message || 'Failed to accept transfer', type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -121,7 +124,7 @@ export const CustodyTransfers: React.FC<CustodyTransfersProps> = ({
   const handleRejectTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rejectingTransferId || !rejectReason.trim()) {
-      alert('A valid rejection reason is legally required under EU custody regulations.');
+      setActionNotice({ message: 'A valid rejection reason is legally required under EU custody regulations.', type: 'error' });
       return;
     }
     setSubmitting(true);
@@ -130,8 +133,9 @@ export const CustodyTransfers: React.FC<CustodyTransfersProps> = ({
       setRejectingTransferId(null);
       setRejectReason('');
       await loadData();
+      setActionNotice({ message: 'Custody transfer rejected with documented audit refusal reason.', type: 'success' });
     } catch (err: any) {
-      alert(err.message || 'Failed to reject transfer');
+      setActionNotice({ message: err.message || 'Failed to reject transfer', type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -153,6 +157,17 @@ export const CustodyTransfers: React.FC<CustodyTransfersProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      {actionNotice && (
+        <div className={`p-4 rounded-xl border flex items-center justify-between text-xs font-semibold ${
+          actionNotice.type === 'success'
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+            : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+        }`}>
+          <span>{actionNotice.message}</span>
+          <button onClick={() => setActionNotice(null)} className="text-slate-400 hover:text-white ml-4">✕</button>
+        </div>
+      )}
+
       {/* Title & Action Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

@@ -36,6 +36,7 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
   const [disposition, setDisposition] = useState<DispositionDecision | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // BMS Telemetry update state
   const [showTelemetryForm, setShowTelemetryForm] = useState(false);
@@ -102,8 +103,9 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
       setShowTelemetryForm(false);
       setTelemetryNote('');
       await loadData();
+      setActionNotice({ message: 'BMS health telemetry recorded and added to verification log.', type: 'success' });
     } catch (err: any) {
-      alert(err.message || 'Failed to update telemetry');
+      setActionNotice({ message: err.message || 'Failed to update telemetry', type: 'error' });
     } finally {
       setUpdating(false);
     }
@@ -125,9 +127,9 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
       setShowTransferModal(false);
       setTransferNotes('');
       await loadData();
-      alert('Custody transfer manifest created successfully and routed to recipient.');
+      setActionNotice({ message: 'Custody transfer manifest created successfully and routed to recipient.', type: 'success' });
     } catch (err: any) {
-      alert(err.message || 'Failed to initiate transfer');
+      setActionNotice({ message: err.message || 'Failed to initiate transfer', type: 'error' });
     } finally {
       setTransferSubmitting(false);
     }
@@ -160,6 +162,17 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+      {actionNotice && (
+        <div className={`p-4 rounded-xl border flex items-center justify-between text-xs font-semibold ${
+          actionNotice.type === 'success'
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+            : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+        }`}>
+          <span>{actionNotice.message}</span>
+          <button onClick={() => setActionNotice(null)} className="text-slate-400 hover:text-white ml-4">✕</button>
+        </div>
+      )}
+
       {/* Navigation & Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
