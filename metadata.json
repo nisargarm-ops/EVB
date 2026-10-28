@@ -1,8 +1,5 @@
 {
   "name": "BatteryPass 360",
-  "description": "Cross-Enterprise EV Battery Passport & Lifecycle Metrology compliant with EU 2023/1542, featuring cryptographic SHA-256 custody chains, RBAC personas, and QpiAI optimization & quantum degradation analytics.",
-  "permissions": [],
-  "capabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "description": "Cross-enterprise EV battery passport and lifecycle metrology platform compliant with EU Battery Regulation 2023/1542, featuring SHA-256 tamper-evident custody chains, RBAC, QR verification, and QpiAI optimization and quantum simulation.",
+  "requestFramePermissions": []
 }

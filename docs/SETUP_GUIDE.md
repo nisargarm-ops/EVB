@@ -1,89 +1,78 @@
 # BatteryPass 360 - Step-by-Step Setup Guide
 
-Welcome to BatteryPass 360! This guide explains how to install, configure, run, and test the application on Windows, macOS, or Linux using simple, beginner-friendly instructions.
+This guide explains how to install, configure, run, and test BatteryPass 360, including optional live cloud credentials for **QpiAI Opt** and **QpiAI QCloud**.
 
 ---
 
 ## Prerequisites
 
-1. **Python 3.10+** (Python 3.12 recommended)
-   - Check version: `python --version`
-2. **Git**
-   - Check version: `git --version`
-3. **Node.js (v18+) & npm** (Required for the React frontend)
-   - On Windows, install via winget:
-     ```powershell
-     winget install OpenJS.NodeJS.LTS
-     ```
-   - Or download directly from [nodejs.org](https://nodejs.org).
+1. **Node.js (v20+ / v22 LTS recommended) & npm**
+   - Check version: `node --version`
+2. **Python 3.10+** *(Optional — required only for live `qpiai-opt-api` and `qpiai-quantum` cloud/SDK execution via the server-side Python bridge)*
+   - Check version: `python3 --version`
 
 ---
 
-## Step 1: Clone the Repository & Configure Environment
+## Step 1: Configure Environment Variables
 
-```powershell
-# Navigate to the project root
-cd batterypass-360
-
+```bash
 # Copy the template configuration file to .env
 cp .env.example .env
 ```
 
-Open `.env` in any text editor (like VS Code or Notepad). Out of the box, `USE_MEMORY_DB=true` is enabled, allowing you to run all tests and APIs without needing cloud credentials immediately.
+Review `.env`:
+- By default, `USE_MEMORY_DB=true` runs the seed passport repository without external database credentials.
+- All QpiAI credentials remain server-side only (never `VITE_`-prefixed):
+  - `QPIAI_OPT_URL` — QpiAI Opt solver endpoint URL (e.g., `https://...`, passed to `qpiai_opt.solver.solver.Solver(problem, url, access_token)`).
+  - `QPIAI_OPT_API_KEY` — QpiAI Opt access token (`access_token` header).
+  - `QPIAI_OPT_QUEUE` — `false` (default synchronous `/QUBO`) or `true` (queued `/job/QUBO`).
+  - `QPIAI_QUANTUM_API_KEY` — QpiAI QCloud secret token (`X-Secret-Token` header for `https://qcloud-server.qpiai.tech`).
+  - `QPIAI_QUANTUM_SERVER_URL` — Optional override for `QPIAI_SERVER_URL` (defaults to `https://qcloud-server.qpiai.tech`).
+  - `QPIAI_QUANTUM_BACKEND` — Verified backend enum value: `QpiAI-QSV-Simulator`, `QpiAI-QDM-Simulator`, `QpiAI-QTN-Simulator`, `QpiAI-QSV-Local`, or `QpiAI-Indus-1`.
+  - `PYTHON_BIN` — Optional Python interpreter path (defaults to `python3`).
 
 ---
 
-## Step 2: Set Up and Run the Python Backend
+## Step 2: Install Node Dependencies & Run Mocked-SDK Tests
 
-```powershell
-# Navigate to the backend directory
-cd backend
-
-# (Optional but recommended) Create and activate a Python virtual environment:
-python -m venv venv
-.\venv\Scripts\Activate.ps1    # On Windows PowerShell
-# source venv/bin/activate       # On Linux / macOS
-
-# Install all backend dependencies (including FastAPI, QpiAI SDKs, pytest):
-pip install -r requirements.txt
-
-# Run the automated test suite to verify everything works:
-python -m pytest -v
-
-# Start the live FastAPI server with hot-reload:
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-Once running:
-- Open your browser to **http://127.0.0.1:8000/docs** to explore the interactive **Swagger API Documentation**.
-- Health check endpoint: **http://127.0.0.1:8000/api/v1/health**.
-
----
-
-## Step 3: Set Up and Run the React Frontend
-
-Open a new terminal window:
-
-```powershell
-# Navigate to the frontend directory
-cd batterypass-360/frontend
-
-# Install dependencies
+```bash
+# Install Node.js dependencies
 npm install
 
-# Start the Vite development server
+# Run the mocked-SDK reliability & constraint test suite (no cloud credentials or paid runs needed)
+npm test
+
+# Type-check and build production bundle
+npm run lint
+npm run build
+```
+
+---
+
+## Step 3: (Optional) Install Official QpiAI Python SDKs for Live Execution
+
+The application includes a strict server-side Python bridge (`src/server/integrations/sdk_bridge.py`) invoked by the Node.js QpiAI adapters when credentials and SDKs are installed. Without these packages or credentials, `/api/integrations/status` honestly reports `missing_credentials` or `configured_but_unavailable` (`SDK_NOT_INSTALLED`), and live requests are never fabricated.
+
+```bash
+# Install verified QpiAI Opt SDK (v1.0.6+) and its runtime imports
+python3 -m pip install qpiai-opt-api networkx requests
+
+# Install verified QpiAI Quantum SDK (v0.7.5+) for QCloud (https://docs.qcloud.qpiai.tech/)
+python3 -m pip install qpiai-quantum
+```
+
+---
+
+## Step 4: Start the Full-Stack Server
+
+```bash
+# Start Express API + Vite frontend on port 3000
 npm run dev
 ```
 
-Open your browser to **http://localhost:5173** to view the application!
+Open **http://localhost:3000** in your browser.
 
----
-
-## Step 4: Exploring Key Workflows
-
-1. **Fleet Passports**: Browse registered battery passports, inspect live State of Health (SoH) gauges, and filter by status.
-2. **Passport Detail**: Click on any battery (e.g. `BAT-NMC-8A2F91C0`) to inspect EU circular metrology data, carbon footprint breakdown, and recycled content percentages.
-3. **Audit Trail Verification**: On the passport detail view, click **"Verify Cryptographic Audit Trail"** to recalculate the SHA-256 hash chain and observe tamper-evident verification.
-4. **Log BMS Telemetry**: Switch to **Fleet Operator** or **OEM** persona in the top navigation bar, then click **"Log BMS Telemetry"** to append a new block to the hash chain.
-5. **Public QR Portal**: Click **"Digital QR Sticker"** to download the printable QR sticker, or navigate to **"Public Verify"** to see what a consumer or roadside vehicle inspector sees.
-6. **QpiAI Studio**: Navigate to **"QpiAI Studio"** to test QUBO logistics optimization with `qpiai-opt-api` and molecular degradation simulation with `qpiai-quantum`.
+### Dedicated QpiAI API Endpoints
+- `GET /api/integrations/status` — Live readiness and capability probe (`configured_and_reachable`, `configured_but_unavailable`, `missing_credentials`, `simulator_only`, `demo_mode`, `execution_error`).
+- `POST /api/optimization/run` — Constrained EV battery disposition optimization (`direct_reuse`, `second_life_bess`, `remanufacturing`, `material_recycling`) using trusted repository telemetry.
+- `POST /api/quantum/run` — Bounded-shot execution (`64..4096` shots) of predefined small quantum circuits (`telemetry_anomaly_ising`, `toy_disposition_ising_2pack`, `bell_calibration_check`).

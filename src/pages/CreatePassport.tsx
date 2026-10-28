@@ -14,7 +14,7 @@ export const CreatePassport: React.FC<CreatePassportProps> = ({ onBack, onSucces
   const [chemistry, setChemistry] = useState('NMC 811');
   const [facility, setFacility] = useState('Berlin-Brandenburg Gigafactory');
   const [country, setCountry] = useState('DE');
-  const [custodian, setCustodian] = useState('QuantumVolt Gigafactory');
+  const [custodian] = useState('QuantumVolt Gigafactory');
 
   const [capacity, setCapacity] = useState(88.0);
   const [voltage, setVoltage] = useState(400.0);
@@ -38,7 +38,7 @@ export const CreatePassport: React.FC<CreatePassportProps> = ({ onBack, onSucces
         serial_number: serialNumber,
         manufacturer_name: manufacturer,
         model_designation: model,
-        chemistry: chemistry,
+        chemistry,
         manufacturing_date: new Date().toISOString(),
         manufacturing_country: country,
         manufacturing_facility: facility,
@@ -79,13 +79,15 @@ export const CreatePassport: React.FC<CreatePassportProps> = ({ onBack, onSucces
       <div className="flex items-center space-x-3">
         <button
           onClick={onBack}
-          className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors"
+          className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div>
           <h1 className="text-2xl font-extrabold text-white">Mint New Battery Passport</h1>
-          <p className="text-xs text-slate-400">EU Regulation 2023/1542 compliant genesis record creation</p>
+          <p className="text-xs text-slate-400">
+            EU Regulation 2023/1542 compliant genesis record creation
+          </p>
         </div>
       </div>
 
@@ -163,7 +165,9 @@ export const CreatePassport: React.FC<CreatePassportProps> = ({ onBack, onSucces
             </div>
 
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Country of Origin (ISO 2-letter)</label>
+              <label className="text-xs text-slate-400 block mb-1">
+                Country of Origin (ISO 2-letter)
+              </label>
               <input
                 type="text"
                 value={country}
@@ -290,14 +294,14 @@ export const CreatePassport: React.FC<CreatePassportProps> = ({ onBack, onSucces
           <button
             type="button"
             onClick={onBack}
-            className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+            className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={submitting}
-            className="flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+            className="flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
           >
             <PlusCircle className="w-4 h-4" />
             <span>{submitting ? 'Minting Genesis Passport...' : 'Mint Battery Passport'}</span>
