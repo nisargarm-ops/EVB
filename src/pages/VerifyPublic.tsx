@@ -58,7 +58,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({ initialId, onNavigat
         </p>
 
         {/* Input Bar */}
-        <div className="max-w-md mx-auto pt-2">
+        <div className="max-w-md mx-auto pt-2 space-y-2">
           <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-2xl p-1.5 focus-within:border-emerald-500/50 shadow-lg">
             <Search className="w-4 h-4 text-slate-400 ml-3" />
             <input
@@ -76,6 +76,22 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({ initialId, onNavigat
             >
               {loading ? 'Verifying...' : 'Verify'}
             </button>
+          </div>
+
+          <div className="flex items-center justify-center space-x-2 text-[11px] text-slate-500">
+            <span>Quick sample lookups:</span>
+            {['BAT-NMC-8A2F91C0', 'BAT-LFP-3C7D410E', 'BAT-NCA-F104A7B2'].map(id => (
+              <button
+                key={id}
+                onClick={() => {
+                  setSearchId(id);
+                  handleVerify(id);
+                }}
+                className="text-cyan-400 hover:underline font-mono text-[10px]"
+              >
+                {id.split('-')[1]}
+              </button>
+            ))}
           </div>
         </div>
       </div>
