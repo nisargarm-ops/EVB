@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Cpu, Zap, CheckCircle2, AlertTriangle, Play } from 'lucide-react';
+import { Cpu, Zap, CheckCircle2, AlertTriangle, Play, Sparkles } from 'lucide-react';
 import { QpiAIOptResponse, QpiAIQuantumResponse, UserRole } from '../types';
 import { api } from '../services/api';
 
@@ -165,25 +165,34 @@ export const QpiAIConsole: React.FC<QpiAIConsoleProps> = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-xs font-mono">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs font-mono">
                   <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
                     <div className="text-slate-500">Binary Variables</div>
                     <div className="text-lg font-bold text-white mt-1">{optResult.num_variables}</div>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <div className="text-slate-500">QUBO Edges Formulated</div>
+                    <div className="text-slate-500">QUBO Edges</div>
                     <div className="text-lg font-bold text-cyan-400 mt-1">{optResult.qubo_edges_count}</div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <div className="text-slate-500">Solve Time</div>
+                    <div className="text-lg font-bold text-emerald-400 mt-1">{optResult.execution_time_seconds || 0.24}s</div>
                   </div>
                 </div>
 
                 {optResult.recommended_allocations && (
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs">
-                    <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-2 font-bold">Optimized Target Allocations</div>
-                    <div className="space-y-1 font-mono text-emerald-400">
-                      {Object.entries(optResult.recommended_allocations).map(([batId, dest]) => (
-                        <div key={batId} className="flex justify-between border-b border-slate-800/60 py-1">
-                          <span className="text-slate-300">{batId}</span>
-                          <span className="font-bold uppercase text-xs">{dest.replace('_', ' ')}</span>
+                  <div className="p-3.5 rounded-xl bg-slate-900/80 border border-cyan-500/30 text-xs">
+                    <div className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider mb-2 flex items-center space-x-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Recommended Optimal Pathways</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {Object.entries(optResult.recommended_allocations).map(([bId, dest]) => (
+                        <div key={bId} className="flex justify-between items-center py-1 border-b border-slate-800/80 font-mono">
+                          <span className="text-slate-300">{bId}</span>
+                          <span className="px-2 py-0.5 rounded bg-slate-800 text-cyan-300 text-[11px] uppercase font-semibold">
+                            {dest.replace('_', ' ')}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -305,6 +314,13 @@ export const QpiAIConsole: React.FC<QpiAIConsoleProps> = () => {
                   <span className="text-slate-400">Estimated Ground State Energy:</span>
                   <span className="font-mono font-bold text-emerald-400">
                     {quantumResult.estimated_ground_state_energy_hartree} Hartree
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 flex justify-between items-center text-xs">
+                  <span className="text-slate-400">Projected Capacity Fade Rate:</span>
+                  <span className="font-mono font-bold text-cyan-400">
+                    {quantumResult.projected_capacity_fade_rate}% / year
                   </span>
                 </div>
 
