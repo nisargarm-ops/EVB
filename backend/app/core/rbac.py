@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Set
 from fastapi import HTTPException, status
 
 class UserRole(str, Enum):
@@ -15,6 +15,10 @@ class UserRole(str, Enum):
     FLEET_OPERATOR = "fleet_operator"
     PUBLIC = "public"
 
+# Role hierarchy: Maps each role to the capabilities/roles it inherits.
+# Administrators possess superuser capabilities across all stakeholder operations.
+# Enterprise stakeholders (Manufacturer, Recycler, etc.) possess their domain role + Public.
+# Public users only have Public access.
 ROLE_HIERARCHY = {
     UserRole.ADMINISTRATOR: [
         UserRole.ADMINISTRATOR, UserRole.AUDITOR, UserRole.MANUFACTURER,
@@ -33,8 +37,10 @@ ROLE_HIERARCHY = {
 
 def normalize_role(role_str: str) -> UserRole:
     """Normalizes role strings (handles uppercase, hyphens, and aliases)."""
-    clean = role_str.strip().lower().replace("-", "_")
-    if clean in ("regulator_auditor", "regulator"):
+    if not role_str:
+        return UserRole.PUBLIC
+    clean = str(role_str).strip().lower().replace("-", "_")
+    if clean in ("regulator_auditor", "regulator", "eu_auditor"):
         return UserRole.AUDITOR
     for r in UserRole:
         if r.value == clean or r.name.lower() == clean:
@@ -42,7 +48,20 @@ def normalize_role(role_str: str) -> UserRole:
     return UserRole.PUBLIC
 
 def check_role_permission(user_role: str, allowed_roles: List[UserRole]) -> bool:
-    norm = normalize_role(user_role)
-    if norm == UserRole.ADMINISTRATOR:
+    """
+    Evaluates whether the user's role is granted access to an operation
+    restricted to allowed_roles.
+    
+    Rules:
+    - User capabilities are derived from ROLE_HIERARCHY for user's role.
+    - If user capabilities intersect with allowed_roles, access is granted.
+    - Prevents privilege escalation (e.g. public role never satisfies manufacturer requirement).
+    """
+    user_norm = normalize_role(user_role)
+    if user_norm == UserRole.ADMINISTRATOR:
         return True
-    return any(norm == r or norm in ROLE_HIERARCHY.get(r, []) for r in allowed_roles)
+    
+    user_capabilities: List[UserRole] = ROLE_HIERARCHY.get(user_norm, [user_norm, UserRole.PUBLIC])
+    allowed_set: Set[UserRole] = set(allowed_roles)
+    
+    return any(cap in allowed_set for cap in user_capabilities)

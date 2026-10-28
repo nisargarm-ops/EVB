@@ -51,6 +51,19 @@ class BatteryService:
                 detail="Only authenticated Cell Manufacturers or Administrators can register new battery passports."
             )
 
+        # Enforce Organization Boundary Check:
+        # A manufacturer can only register batteries under their own organization name
+        user_org = current_user.get("organization", "")
+        if user_role != UserRole.ADMINISTRATOR and user_org:
+            if user_org.strip().lower() != req.manufacturer_name.strip().lower():
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        f"Organization isolation violation: User belonging to '{user_org}' "
+                        f"cannot create a battery passport under '{req.manufacturer_name}'."
+                    )
+                )
+
         now = datetime.now(timezone.utc).isoformat()
         mfg_date = req.manufacturing_date or now
         did, short_id = generate_immutable_battery_id(
@@ -141,6 +154,19 @@ class BatteryService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role '{user_role.value}' is not permitted to log battery BMS telematics."
             )
+
+        # Enforce Custodian or Administrator authorization:
+        user_org = current_user.get("organization", "").strip().lower()
+        battery_custodian = p.get("current_custodian", "").strip().lower()
+        if user_role != UserRole.ADMINISTRATOR and user_org:
+            if user_org != battery_custodian:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        f"Access denied: Battery is under stewardship of '{p.get('current_custodian')}'. "
+                        f"Organization '{current_user.get('organization')}' cannot record telemetry."
+                    )
+                )
 
         now = datetime.now(timezone.utc).isoformat()
         hs = p["health_state"]

@@ -20,6 +20,17 @@ class CustodyService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Battery '{battery_id}' not found.")
         
         user_role = normalize_role(current_user.get("role", "public"))
+        user_org = current_user.get("organization", "").strip().lower()
+        custodian_org = p.get("current_custodian", "").strip().lower()
+        
+        # Enforce that only custodian, auditor, or admin can append custody records
+        if user_role not in (UserRole.ADMINISTRATOR, UserRole.AUDITOR):
+            if user_org and user_org != custodian_org:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Access denied. Organization '{current_user.get('organization')}' cannot append custody events for battery held by '{p.get('current_custodian')}'."
+                )
+
         now = datetime.now(timezone.utc).isoformat()
         b_id = p["battery_id"]
 
@@ -42,7 +53,20 @@ class CustodyService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Battery '{req.battery_id}' not found.")
 
         user_role = normalize_role(current_user.get("role", "public"))
-        # Only custodian or admin can initiate transfer
+        user_org = current_user.get("organization", "").strip().lower()
+        custodian_org = p.get("current_custodian", "").strip().lower()
+
+        # Enforce stewardship authorization: only current custodian or admin can initiate transfer
+        if user_role != UserRole.ADMINISTRATOR and user_org:
+            if user_org != custodian_org:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        f"Custody initiation denied: Only current custodian '{p.get('current_custodian')}' "
+                        f"or Administrator can transfer custody of this battery."
+                    )
+                )
+
         sender_org_name = current_user.get("organization") or p["current_custodian"]
         now = datetime.now(timezone.utc).isoformat()
         transfer_id = str(uuid.uuid4())
@@ -87,22 +111,25 @@ class CustodyService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Transfer is already in '{t['state']}' state.")
 
         user_role = normalize_role(current_user.get("role", "public"))
-        # Least privilege check: only receiver org or admin can accept
-        user_org_id = current_user.get("organization_id", "")
-        user_org_name = current_user.get("organization", "")
+        user_org_id = str(current_user.get("organization_id", "")).strip().lower()
+        user_org_name = str(current_user.get("organization", "")).strip().lower()
+
+        receiver_org_id = str(t.get("receiver_org_id", "")).strip().lower()
+        receiver_org_name = str(t.get("receiver_org_name", "")).strip().lower()
 
         is_admin = (user_role == UserRole.ADMINISTRATOR)
         is_receiver = (
-            user_org_id == t["receiver_org_id"] or 
-            user_org_name.lower() == t["receiver_org_name"].lower() or
-            t["receiver_org_id"].startswith("org-") or # flexible mock for tests
-            "receiver" in current_user.get("id", "").lower()
+            (bool(user_org_id) and user_org_id == receiver_org_id) or
+            (bool(user_org_name) and user_org_name == receiver_org_name)
         )
 
         if not (is_admin or is_receiver):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the designated receiver organization is authorized to accept this custody transfer."
+                detail=(
+                    f"Access denied: Only the designated receiver organization ('{t.get('receiver_org_name')}') "
+                    f"is authorized to accept this custody transfer."
+                )
             )
 
         now = datetime.now(timezone.utc).isoformat()
@@ -115,13 +142,13 @@ class CustodyService:
 
         # Update battery current_custodian
         b_id = t["battery_id"]
-        new_custodian = user_org_name or t["receiver_org_name"]
+        new_custodian = current_user.get("organization") or t["receiver_org_name"]
         await self.repo.update_passport(b_id, {
             "current_custodian": new_custodian,
             "updated_at": now
         })
 
-        # Append custody event block
+        # Append verified custody event block
         await self.repo.append_custody_event({
             "event_id": f"EVT-TRANSFER-{transfer_id[:8]}",
             "battery_id": b_id,
@@ -150,21 +177,25 @@ class CustodyService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Transfer is already in '{t['state']}' state.")
 
         user_role = normalize_role(current_user.get("role", "public"))
-        user_org_id = current_user.get("organization_id", "")
-        user_org_name = current_user.get("organization", "")
+        user_org_id = str(current_user.get("organization_id", "")).strip().lower()
+        user_org_name = str(current_user.get("organization", "")).strip().lower()
+
+        receiver_org_id = str(t.get("receiver_org_id", "")).strip().lower()
+        receiver_org_name = str(t.get("receiver_org_name", "")).strip().lower()
 
         is_admin = (user_role == UserRole.ADMINISTRATOR)
         is_receiver = (
-            user_org_id == t["receiver_org_id"] or 
-            user_org_name.lower() == t["receiver_org_name"].lower() or
-            t["receiver_org_id"].startswith("org-") or
-            "receiver" in current_user.get("id", "").lower()
+            (bool(user_org_id) and user_org_id == receiver_org_id) or
+            (bool(user_org_name) and user_org_name == receiver_org_name)
         )
 
         if not (is_admin or is_receiver):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the designated receiver organization is authorized to reject this custody transfer."
+                detail=(
+                    f"Access denied: Only the designated receiver organization ('{t.get('receiver_org_name')}') "
+                    f"is authorized to reject this custody transfer."
+                )
             )
 
         now = datetime.now(timezone.utc).isoformat()

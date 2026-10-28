@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from ...core.config import settings
 from ...core.rbac import UserRole, normalize_role
-from ...core.security import create_access_token, get_current_user
+from ...core.security import create_access_token, get_current_user, get_current_user_optional
 from ...schemas.auth import RoleSwitchRequest, TokenResponse, UserProfileResponse
 
 router = APIRouter(prefix="/auth", tags=["Authentication & RBAC"])
@@ -18,11 +19,32 @@ ROLE_DEFAULT_ORGS = {
 }
 
 @router.post("/switch-role", response_model=TokenResponse)
-async def switch_persona_role(req: RoleSwitchRequest):
+async def switch_persona_role(
+    req: RoleSwitchRequest,
+    current_user: dict = Depends(get_current_user_optional)
+):
     """
-    Switch active stakeholder persona for RBAC demonstration and return a signed JWT.
+    Switch active stakeholder persona.
+    SECURITY HARDENING:
+    - Disabled completely in production or when ENABLE_DEV_ROLE_SWITCHING is False.
+    - Escalation to privileged roles (ADMINISTRATOR) strictly forbidden without existing admin authorization.
     """
+    if not settings.ENABLE_DEV_ROLE_SWITCHING or settings.ENVIRONMENT.lower() == "production":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role switching endpoint is disabled for security hardening. Please authenticate with valid credentials."
+        )
+
     norm = normalize_role(req.role)
+    
+    # Anti-Privilege Escalation: prevent arbitrary elevation to ADMINISTRATOR
+    if norm == UserRole.ADMINISTRATOR:
+        if not current_user or normalize_role(current_user.get("role", "")) != UserRole.ADMINISTRATOR:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Privilege escalation denied: You cannot switch to Administrator without existing administrator credentials."
+            )
+
     org = req.organization or ROLE_DEFAULT_ORGS.get(norm, "Authorized Enterprise")
     token_payload = {
         "sub": f"usr-{norm.value}",
@@ -44,6 +66,7 @@ async def switch_persona_role(req: RoleSwitchRequest):
 async def get_current_user_profile(current_user: dict = Depends(get_current_user)):
     """
     Retrieve current authenticated profile and organization context.
+    Enforces cryptographically verified JWT bearer token.
     """
     return UserProfileResponse(
         id=current_user.get("id", "usr-anon"),

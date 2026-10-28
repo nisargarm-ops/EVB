@@ -1,6 +1,9 @@
+import os
 from typing import List, Union
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+INSECURE_DEV_DEFAULT_SECRET = "insecure-dev-secret-key-change-in-production-bp360-jwt"
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "BatteryPass 360"
@@ -8,10 +11,13 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     API_V1_STR: str = "/api/v1"
     
-    # Security
-    SECRET_KEY: str = "insecure-dev-secret-key-change-in-production-bp360-jwt"
+    # Security & JWT
+    SECRET_KEY: str = INSECURE_DEV_DEFAULT_SECRET
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours (hardened from 7 days)
+    
+    # Development controls (strictly disabled in production)
+    ENABLE_DEV_ROLE_SWITCHING: bool = False
     
     # CORS
     CORS_ORIGINS: List[str] = [
@@ -19,7 +25,6 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "*"
     ]
     
     # Supabase Persistence
@@ -40,5 +45,23 @@ class Settings(BaseSettings):
         case_sensitive=True,
         extra="ignore"
     )
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        if self.ENVIRONMENT.lower() == "production":
+            if self.SECRET_KEY == INSECURE_DEV_DEFAULT_SECRET or len(self.SECRET_KEY) < 32:
+                raise ValueError(
+                    "CRITICAL SECURITY CONFIGURATION ERROR: Production deployment requires a secure, "
+                    "random SECRET_KEY of at least 32 characters. Do not use the default dev secret."
+                )
+            if self.ENABLE_DEV_ROLE_SWITCHING:
+                raise ValueError(
+                    "CRITICAL SECURITY CONFIGURATION ERROR: ENABLE_DEV_ROLE_SWITCHING must be False in production."
+                )
+            if "*" in self.CORS_ORIGINS:
+                raise ValueError(
+                    "CRITICAL SECURITY CONFIGURATION ERROR: Wildcard '*' CORS origin is forbidden in production."
+                )
+        return self
 
 settings = Settings()

@@ -558,7 +558,26 @@ export class BatteryRepository {
     return null;
   }
 
-  async createPassport(payload: any): Promise<BatteryPassport> {
+  async createPassport(
+    payload: any,
+    actor?: { role: string; organization: string }
+  ): Promise<BatteryPassport> {
+    if (actor) {
+      const roleUpper = actor.role.toUpperCase();
+      if (roleUpper !== 'MANUFACTURER' && roleUpper !== 'ADMINISTRATOR') {
+        throw new Error(`Access denied: Role '${actor.role}' cannot register new battery passports.`);
+      }
+      if (
+        roleUpper !== 'ADMINISTRATOR' &&
+        actor.organization &&
+        actor.organization.trim().toLowerCase() !== payload.manufacturer_name.trim().toLowerCase()
+      ) {
+        throw new Error(
+          `Organization isolation violation: User belonging to '${actor.organization}' cannot mint battery under '${payload.manufacturer_name}'.`
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     const { did, shortId } = generateImmutableBatteryId(
       payload.manufacturer_name,
@@ -648,10 +667,32 @@ export class BatteryRepository {
     return passport;
   }
 
-  async updateTelemetry(batteryId: string, telemetry: any, actorOrg?: string): Promise<BatteryPassport> {
+  async updateTelemetry(
+    batteryId: string,
+    telemetry: any,
+    actor?: { role: string; organization: string } | string
+  ): Promise<BatteryPassport> {
     const passport = await this.getPassport(batteryId);
     if (!passport) {
       throw new Error(`Battery passport ${batteryId} not found`);
+    }
+
+    const actorOrg = typeof actor === 'string' ? actor : actor?.organization;
+    if (actor && typeof actor === 'object') {
+      const roleUpper = actor.role.toUpperCase();
+      const allowedRoles = ['FLEET_OPERATOR', 'SERVICE_CENTER', 'OEM', 'MANUFACTURER', 'ADMINISTRATOR'];
+      if (!allowedRoles.includes(roleUpper)) {
+        throw new Error(`Access denied: Role '${actor.role}' cannot log BMS telemetry.`);
+      }
+      if (
+        roleUpper !== 'ADMINISTRATOR' &&
+        actor.organization &&
+        actor.organization.trim().toLowerCase() !== passport.current_custodian.trim().toLowerCase()
+      ) {
+        throw new Error(
+          `Access denied: Battery is under stewardship of '${passport.current_custodian}'. Organization '${actor.organization}' cannot record telemetry.`
+        );
+      }
     }
 
     const now = new Date().toISOString();
@@ -752,17 +793,33 @@ export class BatteryRepository {
     );
   }
 
-  async createCustodyTransfer(data: {
-    battery_id: string;
-    receiver_org_id: string;
-    receiver_org_name: string;
-    sender_org_id?: string;
-    sender_org_name?: string;
-    transfer_type: string;
-    notes?: string;
-  }): Promise<CustodyTransfer> {
+  async createCustodyTransfer(
+    data: {
+      battery_id: string;
+      receiver_org_id: string;
+      receiver_org_name: string;
+      sender_org_id?: string;
+      sender_org_name?: string;
+      transfer_type: string;
+      notes?: string;
+    },
+    actor?: { role: string; organization: string }
+  ): Promise<CustodyTransfer> {
     const passport = await this.getPassport(data.battery_id);
     if (!passport) throw new Error(`Battery ${data.battery_id} not found.`);
+
+    if (actor) {
+      const roleUpper = actor.role.toUpperCase();
+      if (
+        roleUpper !== 'ADMINISTRATOR' &&
+        actor.organization &&
+        actor.organization.trim().toLowerCase() !== passport.current_custodian.trim().toLowerCase()
+      ) {
+        throw new Error(
+          `Custody initiation denied: Only current custodian '${passport.current_custodian}' or Administrator can transfer custody of this battery.`
+        );
+      }
+    }
 
     const now = new Date().toISOString();
     const id = `trans-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -785,10 +842,25 @@ export class BatteryRepository {
     return transfer;
   }
 
-  async acceptCustodyTransfer(transferId: string, notes?: string): Promise<CustodyTransfer> {
+  async acceptCustodyTransfer(
+    transferId: string,
+    notes?: string,
+    actor?: { role: string; organization: string }
+  ): Promise<CustodyTransfer> {
     const transfer = this.custodyTransfers.get(transferId);
     if (!transfer) throw new Error(`Custody transfer ${transferId} not found.`);
     if (transfer.state !== 'PENDING') throw new Error(`Transfer is already in ${transfer.state} state.`);
+
+    if (actor) {
+      const roleUpper = actor.role.toUpperCase();
+      const actorOrg = actor.organization.trim().toLowerCase();
+      const receiverOrg = transfer.receiver_org_name.trim().toLowerCase();
+      if (roleUpper !== 'ADMINISTRATOR' && actorOrg !== receiverOrg) {
+        throw new Error(
+          `Access denied: Only the designated receiver organization ('${transfer.receiver_org_name}') is authorized to accept this custody transfer.`
+        );
+      }
+    }
 
     const now = new Date().toISOString();
     transfer.state = 'ACCEPTED';
@@ -819,10 +891,25 @@ export class BatteryRepository {
     return transfer;
   }
 
-  async rejectCustodyTransfer(transferId: string, reason: string): Promise<CustodyTransfer> {
+  async rejectCustodyTransfer(
+    transferId: string,
+    reason: string,
+    actor?: { role: string; organization: string }
+  ): Promise<CustodyTransfer> {
     const transfer = this.custodyTransfers.get(transferId);
     if (!transfer) throw new Error(`Custody transfer ${transferId} not found.`);
     if (transfer.state !== 'PENDING') throw new Error(`Transfer is already in ${transfer.state} state.`);
+
+    if (actor) {
+      const roleUpper = actor.role.toUpperCase();
+      const actorOrg = actor.organization.trim().toLowerCase();
+      const receiverOrg = transfer.receiver_org_name.trim().toLowerCase();
+      if (roleUpper !== 'ADMINISTRATOR' && actorOrg !== receiverOrg) {
+        throw new Error(
+          `Access denied: Only the designated receiver organization ('${transfer.receiver_org_name}') is authorized to reject this custody transfer.`
+        );
+      }
+    }
 
     transfer.state = 'REJECTED';
     transfer.responded_at = new Date().toISOString();

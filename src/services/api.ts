@@ -233,12 +233,15 @@ export const api = {
   },
 
   async switchRole(role: UserRole, organization?: string) {
+    if (role === 'ADMINISTRATOR' && currentRole !== 'ADMINISTRATOR') {
+      throw new Error('Privilege escalation denied: You cannot switch to Administrator without existing administrator credentials.');
+    }
     currentRole = role;
     currentOrg = organization || ROLE_DEFAULT_ORGS[role] || 'Unknown Organization';
     safeStorage.setItem('bp360_active_role', currentRole);
     safeStorage.setItem('bp360_active_org', currentOrg);
-    const mockToken = `jwt-${role.toLowerCase()}-${Date.now()}`;
-    setAuthToken(mockToken);
+    const safeToken = `token-session-${role.toLowerCase()}-${Date.now()}`;
+    setAuthToken(safeToken);
     activeUser = {
       id: `usr-${role.toLowerCase()}`,
       email: `${role.toLowerCase()}@batterypass360.eu`,
@@ -248,7 +251,7 @@ export const api = {
       organization_name: currentOrg,
     };
     return {
-      access_token: mockToken,
+      access_token: safeToken,
       token_type: 'bearer',
       role: currentRole,
       organization: currentOrg,
@@ -318,8 +321,11 @@ export const api = {
   },
 
   async createPassport(payload: any): Promise<BatteryPassport> {
-    // If Supabase is connected, persist to Supabase
-    const created = await batteryRepository.createPassport(payload);
+    // Enforce role and organization boundaries
+    const created = await batteryRepository.createPassport(payload, {
+      role: currentRole,
+      organization: currentOrg,
+    });
 
     if (supabase && isSupabaseConfigured) {
       try {
@@ -348,7 +354,10 @@ export const api = {
   },
 
   async updateTelemetry(id: string, telemetry: any): Promise<BatteryPassport> {
-    const updated = await batteryRepository.updateTelemetry(id, telemetry, currentOrg);
+    const updated = await batteryRepository.updateTelemetry(id, telemetry, {
+      role: currentRole,
+      organization: currentOrg,
+    });
     if (supabase && isSupabaseConfigured) {
       try {
         await supabase
@@ -411,10 +420,16 @@ export const api = {
     transfer_type: string;
     notes?: string;
   }): Promise<CustodyTransfer> {
-    const transfer = await batteryRepository.createCustodyTransfer({
-      ...payload,
-      sender_org_name: currentOrg,
-    });
+    const transfer = await batteryRepository.createCustodyTransfer(
+      {
+        ...payload,
+        sender_org_name: currentOrg,
+      },
+      {
+        role: currentRole,
+        organization: currentOrg,
+      }
+    );
     if (supabase && isSupabaseConfigured) {
       try {
         await supabase.from('custody_transfers').insert(transfer);
@@ -426,7 +441,10 @@ export const api = {
   },
 
   async acceptTransfer(transferId: string, notes?: string): Promise<CustodyTransfer> {
-    const updated = await batteryRepository.acceptCustodyTransfer(transferId, notes);
+    const updated = await batteryRepository.acceptCustodyTransfer(transferId, notes, {
+      role: currentRole,
+      organization: currentOrg,
+    });
     if (supabase && isSupabaseConfigured) {
       try {
         await supabase
@@ -445,7 +463,10 @@ export const api = {
   },
 
   async rejectTransfer(transferId: string, reason: string): Promise<CustodyTransfer> {
-    const updated = await batteryRepository.rejectCustodyTransfer(transferId, reason);
+    const updated = await batteryRepository.rejectCustodyTransfer(transferId, reason, {
+      role: currentRole,
+      organization: currentOrg,
+    });
     if (supabase && isSupabaseConfigured) {
       try {
         await supabase
