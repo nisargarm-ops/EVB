@@ -201,7 +201,7 @@ export const HealthTrendLineChart: React.FC<HealthTrendLineChartProps> = ({
               70% EU End-of-Life Threshold
             </text>
 
-            {/* Trend Line */}
+            {/* Trend Line (when multiple readings exist) */}
             {validPoints.length > 1 && (
               <path
                 d={pathD}
@@ -211,6 +211,42 @@ export const HealthTrendLineChart: React.FC<HealthTrendLineChartProps> = ({
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
+            )}
+
+            {/* Single Reading Baseline Indicator (when exactly 1 measurement is recorded) */}
+            {validPoints.length === 1 && (
+              <g>
+                <line
+                  x1={padding.left}
+                  x2={padding.left + innerWidth}
+                  y1={getY(validPoints[0].state_of_health_pct)}
+                  y2={getY(validPoints[0].state_of_health_pct)}
+                  stroke="#059669"
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                  strokeOpacity={0.7}
+                />
+                <rect
+                  x={padding.left + innerWidth / 2 - 130}
+                  y={getY(validPoints[0].state_of_health_pct) - 24}
+                  width="260"
+                  height="18"
+                  rx="9"
+                  fill="#ECFDF3"
+                  stroke="#A7F3D0"
+                  strokeWidth="1"
+                />
+                <text
+                  x={padding.left + innerWidth / 2}
+                  y={getY(validPoints[0].state_of_health_pct) - 12}
+                  textAnchor="middle"
+                  fontSize="9.5"
+                  fill="#065F46"
+                  fontWeight="bold"
+                >
+                  Baseline SOH: {validPoints[0].state_of_health_pct}% (Initial Registration Reading)
+                </text>
+              </g>
             )}
 
             {/* Area under curve */}

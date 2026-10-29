@@ -69,6 +69,14 @@ export const setAuthToken = (token: string) => {
 
 export const getAuthToken = () => authToken;
 
+export function canonicalizeSerial(s: string | null | undefined): string {
+  return String(s || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-')
+    .replace(/[\s\u00A0\u200B]+/g, ' ');
+}
+
 function isValidJwtFormat(token: string): boolean {
   return Boolean(
     token &&
@@ -257,6 +265,35 @@ export const api = {
     organizationName?: string
   ) {
     const resolvedOrg = organizationName || ROLE_DEFAULT_ORGS[role];
+
+    // In browser runtime, prioritize the backend signup proxy to ensure user is auto-confirmed via service role
+    if (isBrowserRuntime) {
+      try {
+        const backendRes = await backendFetch<{ user: any; session: any; profile: UserProfile }>(
+          '/auth/signup',
+          {
+            method: 'POST',
+            body: JSON.stringify({ email, password, fullName, role, organization: resolvedOrg }),
+          },
+          false
+        );
+        if (backendRes.session?.access_token) {
+          setAuthToken(backendRes.session.access_token);
+        }
+        if (backendRes.profile) {
+          activeUser = backendRes.profile;
+          currentRole = backendRes.profile.role;
+          currentOrg = backendRes.profile.organization_name;
+          safeStorage.setItem('bp360_active_role', currentRole);
+          safeStorage.setItem('bp360_active_org', currentOrg);
+          await this.fetchOrganizations().catch(() => {});
+        }
+        return backendRes;
+      } catch (backendErr: any) {
+        // Fall back to direct Supabase auth if backend route is unavailable
+        console.warn('Backend signup proxy unavailable, attempting direct Supabase auth:', backendErr?.message);
+      }
+    }
 
     // Ensure client has fetched runtime auth config if not initialized at build time
     let client = getSupabase();
@@ -853,8 +890,8 @@ export const api = {
             `/verify/${encodeURIComponent(batteryId)}`
           );
 
-          const cleanEntered = String(payload?.physical_serial || '').trim().toUpperCase();
-          const cleanRegistered = String(publicCert.serial_number || '').trim().toUpperCase();
+          const cleanEntered = canonicalizeSerial(payload?.physical_serial);
+          const cleanRegistered = canonicalizeSerial(publicCert.serial_number);
 
           const isMatch = cleanEntered.length > 0 && cleanEntered === cleanRegistered;
 
@@ -1083,7 +1120,7 @@ export const api = {
   async getAnalyticsOverview(): Promise<AnalyticsOverview> {
     if (isBrowserRuntime) {
       try {
-        return await backendFetch<AnalyticsOverview>('/analytics/overview', { method: 'GET' }, false);
+        return await backendFetch<AnalyticsOverview>('/analytics/overview', { method: 'GET' }, true);
       } catch {
         return batteryRepository.getAnalyticsOverview({ role: currentRole, organization: currentOrg });
       }
@@ -1098,7 +1135,7 @@ export const api = {
 
     if (isBrowserRuntime) {
       try {
-        return await backendFetch<BatteryMetricPoint[]>(`/analytics/health-trends?${params.toString()}`, { method: 'GET' }, false);
+        return await backendFetch<BatteryMetricPoint[]>(`/analytics/health-trends?${params.toString()}`, { method: 'GET' }, true);
       } catch {
         return batteryRepository.getBatteryMetricsHistory(batteryId, startDate, endDate, { role: currentRole, organization: currentOrg });
       }
@@ -1113,7 +1150,7 @@ export const api = {
 
     if (isBrowserRuntime) {
       try {
-        return await backendFetch<any[]>(`/analytics/verifications?${params.toString()}`, { method: 'GET' }, false);
+        return await backendFetch<any[]>(`/analytics/verifications?${params.toString()}`, { method: 'GET' }, true);
       } catch {
         return batteryRepository.getVerificationAnalytics(startDate, endDate);
       }
@@ -1124,7 +1161,7 @@ export const api = {
   async getQpiAIExecutionsAnalytics(): Promise<QpiAIExecutionAnalyticsItem[]> {
     if (isBrowserRuntime) {
       try {
-        return await backendFetch<QpiAIExecutionAnalyticsItem[]>('/analytics/qpiai-executions', { method: 'GET' }, false);
+        return await backendFetch<QpiAIExecutionAnalyticsItem[]>('/analytics/qpiai-executions', { method: 'GET' }, true);
       } catch {
         return batteryRepository.getQpiAIExecutionsAnalytics();
       }

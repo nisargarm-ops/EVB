@@ -27,6 +27,14 @@ import {
 } from './hasher.ts';
 import { safeStorage } from './safeStorage.ts';
 
+export function canonicalizeSerial(s: string | null | undefined): string {
+  return String(s || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-')
+    .replace(/[\s\u00A0\u200B]+/g, ' ');
+}
+
 const STORAGE_KEY_PASSPORTS = 'bp360_passports_v2';
 const STORAGE_KEY_CUSTODY = 'bp360_custody_events_v2';
 const STORAGE_KEY_TRANSFERS = 'bp360_custody_transfers_v2';
@@ -1264,7 +1272,7 @@ export class BatteryRepository {
     if (!cleanBatteryId) {
       throw new Error('Digital battery ID is required for verification');
     }
-    const cleanEntered = String(payload?.physical_serial || '').trim().toUpperCase();
+    const cleanEntered = canonicalizeSerial(payload?.physical_serial);
     if (!cleanEntered) {
       throw new Error('Physical casing serial number is required for verification');
     }
@@ -1296,7 +1304,7 @@ export class BatteryRepository {
       throw lockErr;
     }
 
-    const cleanRegistered = String(passport.serial_number || '').trim().toUpperCase();
+    const cleanRegistered = canonicalizeSerial(passport.serial_number);
 
     // 15-minute velocity check
     const fifteenMinutesAgo = now - 15 * 60 * 1000;

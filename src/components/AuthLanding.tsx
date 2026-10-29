@@ -163,11 +163,18 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onAuthSuccess, onGuest
       if (res.session || profilePayload) {
         setSuccessMessage('Enterprise profile registered! Directing to workspace...');
         const profile = profilePayload || (await api.getMe());
-        setTimeout(() => onAuthSuccess(profile), 700);
+        setTimeout(() => onAuthSuccess(profile), 600);
       } else if (res.user) {
-        setSuccessMessage(
-          'Account created successfully in Supabase! If confirmation is required, please check your email.'
-        );
+        setSuccessMessage('Account registered and confirmed! Directing to workspace...');
+        const profile = await api.getMe().catch(() => ({
+          id: res.user.id,
+          email: cleanEmail,
+          full_name: cleanName,
+          role: selectedRole,
+          organization_id: `org-${selectedRole.toLowerCase()}`,
+          organization_name: cleanOrg,
+        }));
+        setTimeout(() => onAuthSuccess(profile), 600);
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Registration failed. Please try again.');

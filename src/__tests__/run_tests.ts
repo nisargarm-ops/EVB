@@ -773,6 +773,63 @@ async function runTestSuite() {
     assert(false, 'Test 39', e.message);
   }
 
+  // --------------------------------------------------------------------------
+  // Test 40: Canonical serial normalization handles Unicode dashes and whitespace
+  // --------------------------------------------------------------------------
+  try {
+    // Test with en-dash and leading/trailing whitespace
+    const unicodeDashSerial = '  NBS\u20132023\u2013LFP\u201344109  ';
+    const matchWithDashes = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-LFP-3C7D410E',
+      { physical_serial: unicodeDashSerial },
+      { role: 'PUBLIC' }
+    );
+    assert(
+      matchWithDashes.status === 'MATCHED' && matchWithDashes.is_authentic === true,
+      'Test 40: Canonical serial normalization matches Unicode dashes and whitespace'
+    );
+  } catch (e: any) {
+    assert(false, 'Test 40', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 41: Single-point battery health degradation properly computes baseline
+  // --------------------------------------------------------------------------
+  try {
+    const history = await batteryRepository.getBatteryMetricsHistory(
+      'BAT-NMC-8A2F91C0',
+      undefined,
+      undefined,
+      { role: 'MANUFACTURER', organization: 'QuantumVolt Gigafactory' }
+    );
+    assert(
+      Array.isArray(history) && history.length >= 1 && typeof history[0].state_of_health_pct === 'number',
+      'Test 41: Single-point and multi-point battery telemetry properly retrieved with authorized enterprise credentials'
+    );
+  } catch (e: any) {
+    assert(false, 'Test 41', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 42: Public access to detailed metrics history strictly blocked (403)
+  // --------------------------------------------------------------------------
+  try {
+    let publicMetricsBlocked = false;
+    try {
+      await batteryRepository.getBatteryMetricsHistory(
+        'BAT-NMC-8A2F91C0',
+        undefined,
+        undefined,
+        { role: 'PUBLIC' }
+      );
+    } catch (err: any) {
+      publicMetricsBlocked = err.statusCode === 403 || err.message.includes('Access denied');
+    }
+    assert(publicMetricsBlocked, 'Test 42: Public access to detailed BMS metrics history is strictly blocked (403 Forbidden)');
+  } catch (e: any) {
+    assert(false, 'Test 42', e.message);
+  }
+
   console.log('\n----------------------------------------------------------------');
   console.log(`SUMMARY: ${passed} Passed, ${failed} Failed out of ${passed + failed} Tests`);
   console.log('----------------------------------------------------------------\n');

@@ -38,9 +38,18 @@ import {
   ROLE_DEFAULT_ORGS,
   ROLE_PROFILE_UUIDS,
   actorToProfile,
+  issueServerJwt,
   normalizeUserRole,
   roleToDbProfileRole,
 } from './auth.ts';
+
+export function canonicalizeSerial(s: string | null | undefined): string {
+  return String(s || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-') // normalize Unicode hyphens/dashes to ASCII '-'
+    .replace(/[\s\u00A0\u200B]+/g, ' '); // collapse whitespace & non-breaking spaces
+}
 import { getAdminSupabaseConfig } from './envLoader.ts';
 
 export class DomainError extends Error {
@@ -119,62 +128,93 @@ export class SupabaseBackendRepository {
       );
     }
 
-    const { data, error } = await db.auth.signUp({
+    // Prefer Supabase Admin API to create user with email_confirm: true directly for local development
+    let createdUser: any = null;
+    let authSessionToken: string | null = null;
+
+    const { data: adminCreated, error: adminErr } = await db.auth.admin.createUser({
       email: payload.email,
       password: payload.password,
-      options: {
-        data: {
-          full_name: payload.fullName,
-          role: payload.role,
-          organization_name: payload.organization,
-        },
+      email_confirm: true,
+      user_metadata: {
+        full_name: payload.fullName,
+        role: requestedRole,
+        organization_name: payload.organization,
       },
     });
 
-    if (error) {
-      throw new DomainError(error.message, 400);
+    if (adminErr) {
+      // If admin createUser is restricted by cloud policy or user already exists, fallback to standard signUp
+      const { data: standardData, error: standardErr } = await db.auth.signUp({
+        email: payload.email,
+        password: payload.password,
+        options: {
+          data: {
+            full_name: payload.fullName,
+            role: requestedRole,
+            organization_name: payload.organization,
+          },
+        },
+      });
+
+      if (standardErr) {
+        throw new DomainError(standardErr.message, 400);
+      }
+
+      createdUser = standardData.user;
+      authSessionToken = standardData.session?.access_token || null;
+
+      // Ensure user email is confirmed via admin service role
+      if (createdUser && !(createdUser as any).email_confirmed_at) {
+        try {
+          await db.auth.admin.updateUserById(createdUser.id, { email_confirm: true });
+        } catch {
+          // ignore if provider restricts update
+        }
+      }
+    } else {
+      createdUser = adminCreated.user;
     }
 
-    if (!data.user) {
+    if (!createdUser) {
       throw new DomainError('Failed to create user in Supabase Auth.', 500);
     }
 
-    // Auto-confirm user email via service role so development logins proceed without blocking
-    if (data.user && !(data.user as any).email_confirmed_at) {
-      try {
-        await db.auth.admin.updateUserById(data.user.id, { email_confirm: true });
-      } catch (confirmErr) {
-        // Deferred if provider restricts admin updates
-      }
-    }
-
-    const org = await this.resolveOrCreateOrganization(payload.organization, payload.role);
+    const org = await this.resolveOrCreateOrganization(payload.organization, requestedRole);
     const actor = await this.resolveOrSyncSupabaseUser(
-      data.user.id,
-      data.user.email || payload.email,
+      createdUser.id,
+      createdUser.email || payload.email,
       {
         full_name: payload.fullName,
-        role: payload.role,
+        role: requestedRole,
         organization_id: org.id,
         organization_name: org.name,
       },
-      data.session?.access_token
+      authSessionToken || undefined
     );
 
     const userProfile: import('../types/index.ts').UserProfile = actor
       ? actorToProfile(actor)
       : {
-          id: data.user.id,
-          email: data.user.email || payload.email,
+          id: createdUser.id,
+          email: createdUser.email || payload.email,
           full_name: payload.fullName,
-          role: payload.role,
+          role: requestedRole,
           organization_id: org.id,
           organization_name: org.name,
         };
 
+    const token = actor ? issueServerJwt(actor) : authSessionToken;
+
     return {
-      user: data.user,
-      session: data.session,
+      user: createdUser,
+      session: token
+        ? {
+            access_token: token,
+            token_type: 'bearer',
+            expires_in: 86400,
+          }
+        : null,
       profile: userProfile,
     };
   }
@@ -2254,7 +2294,7 @@ export class SupabaseBackendRepository {
     if (!cleanBatteryId) {
       throw new DomainError('Digital battery ID is required for verification.', 400);
     }
-    const cleanEntered = String(payload?.physical_serial || '').trim().toUpperCase();
+    const cleanEntered = canonicalizeSerial(payload?.physical_serial);
     if (!cleanEntered) {
       throw new DomainError('Physical serial number is required for verification.', 400);
     }
@@ -2294,7 +2334,7 @@ export class SupabaseBackendRepository {
     const passport = await this.getPassport(row.battery_id);
     const db = this.getAdminClient();
 
-    const cleanRegistered = String(row.serial_number || '').trim().toUpperCase();
+    const cleanRegistered = canonicalizeSerial(row.serial_number);
 
     // 15-minute velocity check on verification_results
     const fifteenMinutesAgo = new Date(now - 15 * 60 * 1000).toISOString();

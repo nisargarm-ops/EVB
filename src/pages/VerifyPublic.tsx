@@ -36,7 +36,7 @@ import {
   TwoStepPrecheckResponse, 
   UserRole 
 } from '../types';
-import { api } from '../services/api';
+import { api, canonicalizeSerial } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { QRScannerModal } from '../components/QRScannerModal';
 
@@ -119,7 +119,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
 
   // Step 2: Submit Permanent Laser-Engraved UID for Backend Comparison
   const handlePhysicalVerify = async (serialToVerify?: string) => {
-    const targetSerial = (serialToVerify ?? physicalSerial).trim();
+    const targetSerial = canonicalizeSerial(serialToVerify ?? physicalSerial);
     if (!targetSerial) {
       setPhysicalError('Please enter or scan the permanent laser-engraved UID from the physical battery pack casing.');
       return;
