@@ -56,7 +56,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
   onOpenScannerModal 
 }) => {
   const { t } = useLanguage();
-  const [searchId, setSearchId] = useState(initialId || 'BAT-NMC-8A2F91C0');
+  const [searchId, setSearchId] = useState(initialId ? initialId.trim() : '');
   
   // Two-Step Pre-check session state (Public safe, zero secrets)
   const [precheck, setPrecheck] = useState<TwoStepPrecheckResponse | null>(null);
@@ -249,11 +249,9 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
   };
 
   useEffect(() => {
-    if (initialId) {
-      setSearchId(initialId);
-      handleVerify(initialId);
-    } else {
-      handleVerify('BAT-NMC-8A2F91C0');
+    if (initialId && initialId.trim()) {
+      setSearchId(initialId.trim());
+      handleVerify(initialId.trim());
     }
   }, [initialId]);
 
@@ -372,22 +370,6 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
             >
               {loading ? t.loading : 'Resolve QR'}
             </button>
-          </div>
-
-          <div className="flex items-center justify-center space-x-2 text-[11px] text-[#64748B] dark:text-[#94A3B8]">
-            <span>Quick QR Passports:</span>
-            {['BAT-NMC-8A2F91C0', 'BAT-LFP-3C7D410E', 'BAT-NCA-F104A7B2'].map(id => (
-              <button
-                key={id}
-                onClick={() => {
-                  setSearchId(id);
-                  handleVerify(id);
-                }}
-                className="text-[#059669] dark:text-[#34D399] hover:underline font-mono text-[10px] font-bold"
-              >
-                {id.split('-')[1]}
-              </button>
-            ))}
           </div>
         </div>
       </div>
@@ -596,48 +578,6 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
                   >
                     <Fingerprint className="w-4 h-4" />
                     <span>{physicalLoading ? t.loading : 'Verify Engraved Serial'}</span>
-                  </button>
-                </div>
-
-                {/* Quick Simulation Chips */}
-                <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-[#64748B] dark:text-[#94A3B8]">
-                  <span className="font-medium">Test Inputs:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sampleValid = precheck.battery_id.includes('NMC') 
-                        ? 'QV-2024-NMC-98124' 
-                        : precheck.battery_id.includes('LFP')
-                        ? 'NBS-2023-LFP-44109'
-                        : 'CATL-2024-NCA-10492';
-                      setPhysicalSerial(sampleValid);
-                      handlePhysicalVerify(sampleValid);
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-[#ECFDF3] dark:bg-[#064E3B]/40 text-[#059669] dark:text-[#34D399] border border-[#D1FAE5] dark:border-[#065F46] font-mono text-[10px] font-bold hover:bg-[#D1FAE5] transition-colors"
-                  >
-                    ✓ Valid Engraved Serial
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const swapped = precheck.battery_id.includes('NMC') ? 'NBS-2023-LFP-44109' : 'QV-2024-NMC-98124';
-                      setPhysicalSerial(swapped);
-                      handlePhysicalVerify(swapped);
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-[#FEF2F2] dark:bg-[#7F1D1D]/30 text-[#DC2626] dark:text-[#F87171] border border-[#FEE2E2] dark:border-[#991B1B] font-mono text-[10px] font-bold hover:bg-[#FEE2E2] transition-colors"
-                  >
-                    ⚠ Swapped QR Sticker
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const fake = 'FAKE-ENGRAVED-SERIAL-999';
-                      setPhysicalSerial(fake);
-                      handlePhysicalVerify(fake);
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-[#FFFBEB] dark:bg-[#78350F]/30 text-[#D97706] dark:text-[#FBBF24] border border-[#FDE68A] dark:border-[#78350F] font-mono text-[10px] font-bold hover:bg-[#FEF3C7] transition-colors"
-                  >
-                    ✕ Counterfeit Serial
                   </button>
                 </div>
               </div>

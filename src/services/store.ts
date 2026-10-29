@@ -657,13 +657,25 @@ export class BatteryRepository {
     this.persist();
   }
 
-  async listPassports(statusFilter?: string): Promise<PassportSummary[]> {
-    const list = Array.from(this.passports.values());
-    const filtered = statusFilter && statusFilter !== 'ALL'
-      ? list.filter(p => p.status === statusFilter)
-      : list;
+  async listPassports(
+    statusFilter?: string,
+    actor?: { role: string; organization?: string } | null
+  ): Promise<PassportSummary[]> {
+    let list = Array.from(this.passports.values());
+    if (statusFilter && statusFilter !== 'ALL') {
+      list = list.filter(p => p.status === statusFilter);
+    }
 
-    return filtered.map(p => ({
+    if (actor && actor.role !== 'ADMINISTRATOR' && actor.role !== 'REGULATOR_AUDITOR') {
+      const actorOrg = (actor.organization || '').trim().toLowerCase();
+      list = list.filter(p => {
+        const mfgMatch = p.manufacturer_name.trim().toLowerCase() === actorOrg;
+        const custMatch = p.current_custodian.trim().toLowerCase() === actorOrg;
+        return mfgMatch || custMatch;
+      });
+    }
+
+    return list.map(p => ({
       battery_id: p.battery_id,
       battery_did: p.battery_did,
       serial_number: p.serial_number,
@@ -1074,8 +1086,17 @@ export class BatteryRepository {
     return transfer;
   }
 
-  async listTransfers(): Promise<CustodyTransfer[]> {
-    return this.listCustodyTransfers();
+  async listTransfers(actor?: { role: string; organization?: string } | null): Promise<CustodyTransfer[]> {
+    const all = await this.listCustodyTransfers();
+    if (!actor || actor.role === 'ADMINISTRATOR' || actor.role === 'REGULATOR_AUDITOR') {
+      return all;
+    }
+    const actorOrg = (actor.organization || '').trim().toLowerCase();
+    return all.filter(t => {
+      const isSender = t.sender_org_name.trim().toLowerCase() === actorOrg;
+      const isReceiver = t.receiver_org_name.trim().toLowerCase() === actorOrg;
+      return isSender || isReceiver;
+    });
   }
 
   async createTransfer(

@@ -1259,9 +1259,12 @@ export class SupabaseBackendRepository {
     return byDid || null;
   }
 
-  async listPassports(statusFilter?: string): Promise<PassportSummary[]> {
+  async listPassports(statusFilter?: string, actor?: AuthenticatedActor | null): Promise<PassportSummary[]> {
     if (!this.isConfigured()) {
-      return batteryRepository.listPassports(statusFilter);
+      return batteryRepository.listPassports(
+        statusFilter,
+        actor ? { role: actor.role, organization: actor.organization_name } : undefined
+      );
     }
     await this.ensureSeeded();
     const db = this.getAdminClient();
@@ -1276,8 +1279,29 @@ export class SupabaseBackendRepository {
       throw new DomainError('Failed to fetch battery passports from Supabase.', 500);
     }
 
-    const rows = data || [];
+    let rows = data || [];
     const orgMap = await this.getOrganizationsMap();
+
+    // Tenant Isolation:
+    // Administrator & Regulator Auditor have network-wide oversight across all registered packs.
+    // Specific enterprise tenants only see battery packs belonging to their organization
+    // (i.e. where they are the manufacturer, current custodian, or previous custodian).
+    if (actor && actor.role !== 'ADMINISTRATOR' && actor.role !== 'REGULATOR_AUDITOR') {
+      const actorOrgName = (actor.organization_name || '').trim().toLowerCase();
+      const actorOrgId = actor.organization_id || '';
+      rows = rows.filter((r: any) => {
+        const mfgOrg = orgMap.get(r.manufacturer_org_id);
+        const custOrg = orgMap.get(r.current_custodian_org_id);
+        const mfgMatch =
+          r.manufacturer_org_id === actorOrgId ||
+          (mfgOrg && mfgOrg.name.trim().toLowerCase() === actorOrgName);
+        const custMatch =
+          r.current_custodian_org_id === actorOrgId ||
+          (custOrg && custOrg.name.trim().toLowerCase() === actorOrgName);
+        return mfgMatch || custMatch;
+      });
+    }
+
     const metricsMap = await this.getLatestMetricsByBatteryUuids(rows.map((r: any) => r.id));
 
     return rows.map((r: any) => {
@@ -1771,9 +1795,11 @@ export class SupabaseBackendRepository {
     });
   }
 
-  async listTransfers(): Promise<CustodyTransfer[]> {
+  async listTransfers(actor?: AuthenticatedActor | null): Promise<CustodyTransfer[]> {
     if (!this.isConfigured()) {
-      return batteryRepository.listTransfers();
+      return batteryRepository.listTransfers(
+        actor ? { role: actor.role, organization: actor.organization_name } : undefined
+      );
     }
     await this.ensureSeeded();
     const db = this.getAdminClient();
@@ -1792,7 +1818,7 @@ export class SupabaseBackendRepository {
       batMap.set(b.id, b.battery_id);
     }
 
-    return (transfers || []).map((t: any) => ({
+    let list = (transfers || []).map((t: any) => ({
       id: t.id,
       battery_id: batMap.get(t.battery_id) || t.battery_id,
       sender_org_id: t.sender_org_id,
@@ -1808,6 +1834,23 @@ export class SupabaseBackendRepository {
       initiated_at: toIsoUtc(t.initiated_at),
       responded_at: t.responded_at ? toIsoUtc(t.responded_at) : null,
     }));
+
+    // If tenant actor, return transfers where their organization is sender OR receiver (or admin sees all)
+    if (actor && actor.role !== 'ADMINISTRATOR' && actor.role !== 'REGULATOR_AUDITOR') {
+      const actorOrgName = (actor.organization_name || '').trim().toLowerCase();
+      const actorOrgId = actor.organization_id || '';
+      list = list.filter((t) => {
+        const isSender =
+          t.sender_org_id === actorOrgId ||
+          t.sender_org_name.trim().toLowerCase() === actorOrgName;
+        const isReceiver =
+          t.receiver_org_id === actorOrgId ||
+          t.receiver_org_name.trim().toLowerCase() === actorOrgName;
+        return isSender || isReceiver;
+      });
+    }
+
+    return list;
   }
 
   async createTransfer(

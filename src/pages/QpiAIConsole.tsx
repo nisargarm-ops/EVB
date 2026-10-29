@@ -9,13 +9,12 @@ interface QpiAIConsoleProps {
 
 export const QpiAIConsole: React.FC<QpiAIConsoleProps> = () => {
   const [activeTab, setActiveTab] = useState<'opt' | 'quantum'>('opt');
+  const [availablePacks, setAvailablePacks] = useState<
+    Array<{ battery_id: string; chemistry: string; serial_number: string }>
+  >([]);
 
   // Opt State
-  const [selectedBatteries, setSelectedBatteries] = useState<string[]>([
-    'BAT-NMC-8A2F91C0',
-    'BAT-LFP-3C7D410E',
-    'BAT-NCA-F104A7B2',
-  ]);
+  const [selectedBatteries, setSelectedBatteries] = useState<string[]>([]);
   const [optMode, setOptMode] = useState<'platform' | 'local'>('platform');
   const [optResult, setOptResult] = useState<QpiAIOptResponse | null>(null);
   const [optLoading, setOptLoading] = useState(false);
@@ -29,11 +28,34 @@ export const QpiAIConsole: React.FC<QpiAIConsoleProps> = () => {
   const [quantumLoading, setQuantumLoading] = useState(false);
   const [consoleError, setConsoleError] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    api
+      .listPassports()
+      .then((list) => {
+        if (list && list.length > 0) {
+          setAvailablePacks(list);
+          setSelectedBatteries(list.slice(0, 3).map((p) => p.battery_id));
+          if (list[0].chemistry) {
+            setCathode(list[0].chemistry);
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load tenant packs for QpiAI console:', err);
+      });
+  }, []);
+
   const handleRunOpt = async () => {
     setOptLoading(true);
     setConsoleError(null);
     try {
-      const res = await api.runQpiAIOpt(selectedBatteries, optMode);
+      const targetPacks =
+        selectedBatteries.length > 0
+          ? selectedBatteries
+          : availablePacks.length > 0
+          ? [availablePacks[0].battery_id]
+          : ['BAT-NMC-8A2F91C0'];
+      const res = await api.runQpiAIOpt(targetPacks, optMode);
       setOptResult(res);
     } catch (err: any) {
       setConsoleError(err.message || 'Optimization request failed');
@@ -46,8 +68,9 @@ export const QpiAIConsole: React.FC<QpiAIConsoleProps> = () => {
     setQuantumLoading(true);
     setConsoleError(null);
     try {
+      const targetBattery = selectedBatteries[0] || availablePacks[0]?.battery_id || 'BAT-NMC-8A2F91C0';
       const res = await api.runQpiAIQuantum(
-        'BAT-NMC-8A2F91C0',
+        targetBattery,
         cathode,
         simSoH,
         simCycles,

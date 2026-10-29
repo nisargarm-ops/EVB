@@ -26,7 +26,7 @@ const MainApp: React.FC = () => {
   const { theme } = useTheme();
 
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
-  const [selectedBatteryId, setSelectedBatteryId] = useState<string>('BAT-NMC-8A2F91C0');
+  const [selectedBatteryId, setSelectedBatteryId] = useState<string>('');
   const [qrModalBatteryId, setQrModalBatteryId] = useState<string | null>(null);
   const [scannerModalOpen, setScannerModalOpen] = useState<boolean>(false);
 
@@ -110,6 +110,7 @@ const MainApp: React.FC = () => {
       setActiveOrg(data.organization);
       const user = await api.getMe();
       setCurrentUser(user);
+      setSelectedBatteryId('');
     } catch (err) {
       console.error('Organization switch failed:', err);
     }
@@ -119,6 +120,7 @@ const MainApp: React.FC = () => {
     setCurrentUser(user);
     setActiveRole(user.role);
     setActiveOrg(user.organization_name);
+    setSelectedBatteryId('');
     setGuestVerifyMode(false);
   };
 
@@ -130,6 +132,7 @@ const MainApp: React.FC = () => {
     }
     setCurrentUser(null);
     setActiveRole('PUBLIC');
+    setSelectedBatteryId('');
     setGuestVerifyMode(false);
     setCurrentTab('dashboard');
   };

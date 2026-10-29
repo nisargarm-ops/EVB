@@ -55,14 +55,25 @@ export const CustodyTransfers: React.FC<CustodyTransfersProps> = ({
         api.listPassports(),
       ]);
       setTransfers(transferList);
-      setPassports(passportList);
-      const orgs = api.listOrganizations();
+
+      // Only allow initiating transfers for batteries currently held by the active organization (or all if Admin)
+      const heldPassports =
+        activeRole === 'ADMINISTRATOR'
+          ? passportList
+          : passportList.filter(
+              (p) => p.current_custodian.trim().toLowerCase() === activeOrg.trim().toLowerCase()
+            );
+
+      setPassports(heldPassports);
+      const orgs = api
+        .listOrganizations()
+        .filter((o) => o.name.trim().toLowerCase() !== activeOrg.trim().toLowerCase());
       setOrganizations(orgs);
-      if (passportList.length > 0 && !selectedBatteryId) {
-        setSelectedBatteryId(passportList[0].battery_id);
+      if (heldPassports.length > 0 && (!selectedBatteryId || !heldPassports.some(p => p.battery_id === selectedBatteryId))) {
+        setSelectedBatteryId(heldPassports[0].battery_id);
       }
       if (orgs.length > 0 && !recipientOrgId) {
-        setRecipientOrgId(orgs[1]?.id || orgs[0].id);
+        setRecipientOrgId(orgs[0].id);
       }
     } catch (err) {
       console.error('Failed to load transfers', err);
@@ -356,27 +367,40 @@ export const CustodyTransfers: React.FC<CustodyTransfersProps> = ({
                 {/* Action buttons if Pending */}
                 {isPending && (
                   <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-[#E5E7EB]">
-                    <button
-                      onClick={() => {
-                        setRejectingTransferId(t.id);
-                        setRejectReason('');
-                      }}
-                      className="px-3.5 py-1.5 rounded-xl bg-[#FEE2E2] hover:bg-[#FECACA] text-[#DC2626] border border-[#FECACA] text-xs font-semibold transition-all flex items-center space-x-1.5"
-                    >
-                      <XCircle className="w-3.5 h-3.5" />
-                      <span>Reject Transfer</span>
-                    </button>
+                    {activeRole === 'ADMINISTRATOR' ||
+                    t.receiver_org_name.trim().toLowerCase() === activeOrg.trim().toLowerCase() ? (
+                      <>
+                        <button
+                          onClick={() => {
+                            setRejectingTransferId(t.id);
+                            setRejectReason('');
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl bg-[#FEE2E2] hover:bg-[#FECACA] text-[#DC2626] border border-[#FECACA] text-xs font-semibold transition-all flex items-center space-x-1.5"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>Reject Transfer</span>
+                        </button>
 
-                    <button
-                      onClick={() => {
-                        setAcceptingTransferId(t.id);
-                        setAcceptNotes('');
-                      }}
-                      className="px-4 py-1.5 rounded-xl bg-[#14532D] hover:bg-[#166534] text-white text-xs font-bold transition-all shadow-sm flex items-center space-x-1.5"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5 stroke-[2.5]" />
-                      <span>Accept Transfer & Append Block</span>
-                    </button>
+                        <button
+                          onClick={() => {
+                            setAcceptingTransferId(t.id);
+                            setAcceptNotes('');
+                          }}
+                          className="px-4 py-1.5 rounded-xl bg-[#14532D] hover:bg-[#166534] text-white text-xs font-bold transition-all shadow-sm flex items-center space-x-1.5"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Accept Transfer & Append Block</span>
+                        </button>
+                      </>
+                    ) : t.sender_org_name.trim().toLowerCase() === activeOrg.trim().toLowerCase() ? (
+                      <span className="text-xs text-[#059669] font-medium bg-[#ECFDF3] px-3 py-1 rounded-lg border border-[#D1FAE5]">
+                        Outbound Manifest: Awaiting recipient acceptance by {t.receiver_org_name}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-[#64748B] font-medium bg-[#F8FAF7] px-3 py-1 rounded-lg border border-[#E5E7EB]">
+                        Audited Manifest: Pending between {t.sender_org_name} and {t.receiver_org_name}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

@@ -39,7 +39,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // Health Trend Chart State
-  const [selectedBatteryId, setSelectedBatteryId] = useState<string>('BAT-NMC-8A2F91C0');
+  const [selectedBatteryId, setSelectedBatteryId] = useState<string>('');
   const [healthMetrics, setHealthMetrics] = useState<BatteryMetricPoint[]>([]);
   const [healthLoading, setHealthLoading] = useState<boolean>(false);
   const [healthDateFilter, setHealthDateFilter] = useState<'30D' | '90D' | '1Y' | 'ALL'>('ALL');
@@ -68,16 +68,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         model: p.chemistry,
       }));
       setBatteryList(list);
-      if (list.length > 0 && !list.find(b => b.id === selectedBatteryId)) {
+      if (list.length > 0 && (!selectedBatteryId || !list.find(b => b.id === selectedBatteryId))) {
         setSelectedBatteryId(list[0].id);
+      } else if (list.length === 0) {
+        setSelectedBatteryId('');
       }
     } catch {
-      // Fallback to defaults
-      setBatteryList([
-        { id: 'BAT-NMC-8A2F91C0', serial: 'QV-2024-NMC-98124', model: 'NMC 811' },
-        { id: 'BAT-LFP-3C7D410E', serial: 'NBS-2023-LFP-44109', model: 'LFP' },
-        { id: 'BAT-NCA-F104A7B2', serial: 'REC-2021-NCA-10042', model: 'NCA' },
-      ]);
+      setBatteryList([]);
+      setSelectedBatteryId('');
     }
   };
 

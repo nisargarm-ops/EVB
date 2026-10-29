@@ -256,17 +256,17 @@ async function startServer() {
   });
 
   // Battery Passports (supporting both /passports and /batteries path conventions)
-  const handleListPassports = async (req: Request, res: Response) => {
+  const handleListPassports = async (req: AuthRequest, res: Response) => {
     try {
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-      const list = await supabaseBackendRepo.listPassports(status);
+      const list = await supabaseBackendRepo.listPassports(status, req.actor || null);
       res.json(list);
     } catch (err) {
       sendError(res, err, 'Failed to fetch battery passports');
     }
   };
-  apiRouter.get('/passports', handleListPassports);
-  apiRouter.get('/batteries', handleListPassports);
+  apiRouter.get('/passports', auth.optionalAuth, handleListPassports);
+  apiRouter.get('/batteries', auth.optionalAuth, handleListPassports);
 
   const handleGetPassport = async (req: Request, res: Response) => {
     try {
@@ -357,9 +357,9 @@ async function startServer() {
   );
 
   // Custody Transfers
-  apiRouter.get('/custody-transfers', async (_req: Request, res: Response) => {
+  apiRouter.get('/custody-transfers', auth.optionalAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const transfers = await supabaseBackendRepo.listTransfers();
+      const transfers = await supabaseBackendRepo.listTransfers(req.actor || null);
       res.json(transfers);
     } catch (err) {
       sendError(res, err, 'Failed to load custody transfers');

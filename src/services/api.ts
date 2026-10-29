@@ -683,9 +683,9 @@ export const api = {
         statusFilter && statusFilter !== 'ALL'
           ? `?status=${encodeURIComponent(statusFilter)}`
           : '';
-      return backendFetch<PassportSummary[]>(`/passports${q}`);
+      return backendFetch<PassportSummary[]>(`/passports${q}`, { method: 'GET' }, true);
     }
-    return batteryRepository.listPassports(statusFilter);
+    return batteryRepository.listPassports(statusFilter, { role: currentRole, organization: currentOrg });
   },
 
   async getPassport(id: string): Promise<BatteryPassport> {
@@ -757,9 +757,9 @@ export const api = {
 
   async listTransfers(): Promise<CustodyTransfer[]> {
     if (isBrowserRuntime) {
-      return backendFetch<CustodyTransfer[]>('/custody-transfers');
+      return backendFetch<CustodyTransfer[]>('/custody-transfers', { method: 'GET' }, true);
     }
-    return batteryRepository.listCustodyTransfers();
+    return batteryRepository.listTransfers({ role: currentRole, organization: currentOrg });
   },
 
   async createTransfer(payload: {
