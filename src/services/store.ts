@@ -35,6 +35,22 @@ export function canonicalizeSerial(s: string | null | undefined): string {
     .replace(/[\s\u00A0\u200B]+/g, ' ');
 }
 
+export function normalizeSerialAlphanumeric(s: string | null | undefined): string {
+  return String(s || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+export function isSerialMatch(entered: string | null | undefined, registered: string | null | undefined): boolean {
+  const cleanEntered = canonicalizeSerial(entered);
+  const cleanRegistered = canonicalizeSerial(registered);
+  if (!cleanEntered || !cleanRegistered) return false;
+  if (cleanEntered === cleanRegistered) return true;
+  const normEntered = normalizeSerialAlphanumeric(entered);
+  const normRegistered = normalizeSerialAlphanumeric(registered);
+  return normEntered.length > 0 && normEntered === normRegistered;
+}
+
 const STORAGE_KEY_PASSPORTS = 'bp360_passports_v2';
 const STORAGE_KEY_CUSTODY = 'bp360_custody_events_v2';
 const STORAGE_KEY_TRANSFERS = 'bp360_custody_transfers_v2';
@@ -1348,7 +1364,7 @@ export class BatteryRepository {
     let passportDetails: PublicVerification | null = null;
 
     // Timing-safe length and value equality check
-    const isMatch = cleanEntered.length === cleanRegistered.length && cleanEntered === cleanRegistered && cleanEntered.length > 0;
+    const isMatch = isSerialMatch(payload?.physical_serial, passport.serial_number);
 
     if (isMatch) {
       status = 'MATCHED';

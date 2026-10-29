@@ -910,6 +910,55 @@ async function runTestSuite() {
     assert(false, 'Test 45', e.message);
   }
 
+  // --------------------------------------------------------------------------
+  // Test 46: Alphanumeric serial entry (omitting hyphens or spaces) matches casing engraving
+  // --------------------------------------------------------------------------
+  try {
+    // Reset any prior test attempt counts on BAT-NMC-8A2F91C0
+    await batteryRepository.resetLockout(
+      'BAT-NMC-8A2F91C0',
+      'Test 46 automated reset',
+      { role: 'ADMINISTRATOR' }
+    );
+
+    // Battery BAT-NMC-8A2F91C0 has registered serial 'QV-2024-NMC-98124'
+    // User types 'QV2024NMC98124' without hyphens
+    const matchWithoutHyphens = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-NMC-8A2F91C0',
+      { physical_serial: 'QV2024NMC98124' },
+      { role: 'PUBLIC' }
+    );
+
+    // User types with spaces 'QV 2024 NMC 98124'
+    const matchWithSpaces = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-NMC-8A2F91C0',
+      { physical_serial: 'QV 2024 NMC 98124' },
+      { role: 'PUBLIC' }
+    );
+
+    // Counterfeit serial with wrong number 'QV2024NMC99999'
+    const counterfeitMismatch = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-NMC-8A2F91C0',
+      { physical_serial: 'QV2024NMC99999' },
+      { role: 'PUBLIC' }
+    );
+
+    const isTest46Passed =
+      matchWithoutHyphens.status === 'MATCHED' &&
+      matchWithoutHyphens.is_authentic === true &&
+      matchWithSpaces.status === 'MATCHED' &&
+      matchWithSpaces.is_authentic === true &&
+      (counterfeitMismatch.status === 'MISMATCH_FRAUD' || counterfeitMismatch.status === 'UNREGISTERED_SERIAL') &&
+      counterfeitMismatch.is_authentic === false;
+
+    assert(
+      isTest46Passed,
+      'Test 46: Alphanumeric serial entry without hyphens (e.g. SN2026NMC78284) matches registered engraving and rejects counterfeits'
+    );
+  } catch (e: any) {
+    assert(false, 'Test 46', e.message);
+  }
+
   console.log('\n----------------------------------------------------------------');
   console.log(`SUMMARY: ${passed} Passed, ${failed} Failed out of ${passed + failed} Tests`);
   console.log('----------------------------------------------------------------\n');

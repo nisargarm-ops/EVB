@@ -77,6 +77,22 @@ export function canonicalizeSerial(s: string | null | undefined): string {
     .replace(/[\s\u00A0\u200B]+/g, ' ');
 }
 
+export function normalizeSerialAlphanumeric(s: string | null | undefined): string {
+  return String(s || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+export function isSerialMatch(entered: string | null | undefined, registered: string | null | undefined): boolean {
+  const cleanEntered = canonicalizeSerial(entered);
+  const cleanRegistered = canonicalizeSerial(registered);
+  if (!cleanEntered || !cleanRegistered) return false;
+  if (cleanEntered === cleanRegistered) return true;
+  const normEntered = normalizeSerialAlphanumeric(entered);
+  const normRegistered = normalizeSerialAlphanumeric(registered);
+  return normEntered.length > 0 && normEntered === normRegistered;
+}
+
 function isValidJwtFormat(token: string): boolean {
   return Boolean(
     token &&
@@ -890,10 +906,7 @@ export const api = {
             `/verify/${encodeURIComponent(batteryId)}`
           );
 
-          const cleanEntered = canonicalizeSerial(payload?.physical_serial);
-          const cleanRegistered = canonicalizeSerial(publicCert.serial_number);
-
-          const isMatch = cleanEntered.length > 0 && cleanEntered === cleanRegistered;
+          const isMatch = isSerialMatch(payload?.physical_serial, publicCert.serial_number);
 
           if (isMatch) {
             return {

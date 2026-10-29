@@ -50,6 +50,22 @@ export function canonicalizeSerial(s: string | null | undefined): string {
     .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-') // normalize Unicode hyphens/dashes to ASCII '-'
     .replace(/[\s\u00A0\u200B]+/g, ' '); // collapse whitespace & non-breaking spaces
 }
+
+export function normalizeSerialAlphanumeric(s: string | null | undefined): string {
+  return String(s || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+export function isSerialMatch(entered: string | null | undefined, registered: string | null | undefined): boolean {
+  const cleanEntered = canonicalizeSerial(entered);
+  const cleanRegistered = canonicalizeSerial(registered);
+  if (!cleanEntered || !cleanRegistered) return false;
+  if (cleanEntered === cleanRegistered) return true;
+  const normEntered = normalizeSerialAlphanumeric(entered);
+  const normRegistered = normalizeSerialAlphanumeric(registered);
+  return normEntered.length > 0 && normEntered === normRegistered;
+}
 import { getAdminSupabaseConfig } from './envLoader.ts';
 
 export class DomainError extends Error {
@@ -2408,7 +2424,7 @@ export class SupabaseBackendRepository {
     let matchDetails = '';
     let passportDetails: PublicVerification | null = null;
 
-    const isMatch = cleanEntered.length === cleanRegistered.length && cleanEntered === cleanRegistered && cleanEntered.length > 0;
+    const isMatch = isSerialMatch(payload?.physical_serial, row.serial_number);
 
     if (isMatch) {
       status = 'MATCHED';
