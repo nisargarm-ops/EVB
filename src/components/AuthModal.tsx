@@ -87,11 +87,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         signUpRole,
         signUpOrg || undefined
       );
-      if (res.user) {
-        setSuccessMsg('Enterprise profile created! Check email if confirmation is enabled.');
-        const profile = await api.getMe();
+      const profilePayload = 'profile' in res ? (res as any).profile : null;
+      if (res.session || profilePayload) {
+        setSuccessMsg('Enterprise profile registered and authenticated!');
+        const profile = profilePayload || (await api.getMe());
         onAuthSuccess(profile);
         setTimeout(() => onClose(), 1000);
+      } else if (res.user) {
+        setSuccessMsg(
+          'Enterprise profile created in Supabase! If "Confirm email" is enabled in Supabase Auth, check your inbox to confirm your address.'
+        );
       }
     } catch (err: any) {
       setError(err.message || 'Registration failed.');

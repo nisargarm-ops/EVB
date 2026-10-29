@@ -1,5 +1,11 @@
-import dotenv from 'dotenv';
-dotenv.config({ override: false });
+import {
+  loadAppEnvironment,
+  getPublicSupabaseConfig,
+  getAdminSupabaseConfig,
+} from './src/server/envLoader.ts';
+
+// Load environment variables across standard files and AI Studio container files
+loadAppEnvironment();
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -169,6 +175,81 @@ async function startServer() {
 
   apiRouter.post('/auth/sync-profile', auth.requireAuth, async (req: AuthRequest, res: Response) => {
     res.json(actorToProfile(req.actor!));
+  });
+
+  // Public Supabase Client Config Hydration (Safe: never leaks secret/service_role keys)
+  apiRouter.get('/auth/config', (_req: Request, res: Response) => {
+    const pub = getPublicSupabaseConfig();
+    res.json({
+      isConfigured: pub.isConfigured,
+      supabaseUrl: pub.supabaseUrl || null,
+      supabaseAnonKey: pub.supabaseAnonKey || null,
+      authProvider: pub.isConfigured ? 'supabase' : 'memory',
+      missing: pub.missingVars,
+    });
+  });
+
+  // Real Supabase Auth Registration Endpoint (with tenant profile & org provisioning)
+  apiRouter.post('/auth/signup', async (req: Request, res: Response) => {
+    try {
+      const { email, password, fullName, role, organization } = req.body || {};
+      if (!email || !password) {
+        res.status(400).json({ detail: 'Email and password are required.' });
+        return;
+      }
+
+      const adminConfig = getAdminSupabaseConfig();
+      const pubConfig = getPublicSupabaseConfig();
+      if (!adminConfig.isConfigured && !pubConfig.isConfigured) {
+        res.status(503).json({
+          detail: 'Supabase Auth is not configured in this environment.',
+          missing: pubConfig.missingVars,
+        });
+        return;
+      }
+
+      const created = await supabaseBackendRepo.signUpUser({
+        email: String(email).trim(),
+        password: String(password),
+        fullName: String(fullName || email.split('@')[0]).trim(),
+        role: normalizeUserRole(role),
+        organization: String(organization || ROLE_DEFAULT_ORGS[normalizeUserRole(role)].name).trim(),
+      });
+
+      res.status(201).json(created);
+    } catch (err) {
+      sendError(res, err, 'Registration failed');
+    }
+  });
+
+  // Real Supabase Auth Password Sign-In Endpoint
+  apiRouter.post('/auth/signin', async (req: Request, res: Response) => {
+    try {
+      const { email, password } = req.body || {};
+      if (!email || !password) {
+        res.status(400).json({ detail: 'Email and password are required.' });
+        return;
+      }
+
+      const adminConfig = getAdminSupabaseConfig();
+      const pubConfig = getPublicSupabaseConfig();
+      if (!adminConfig.isConfigured && !pubConfig.isConfigured) {
+        res.status(503).json({
+          detail: 'Supabase Auth is not configured in this environment.',
+          missing: pubConfig.missingVars,
+        });
+        return;
+      }
+
+      const authenticated = await supabaseBackendRepo.signInUser(
+        String(email).trim(),
+        String(password)
+      );
+
+      res.json(authenticated);
+    } catch (err) {
+      sendError(res, err, 'Authentication failed');
+    }
   });
 
   // Enterprise Directory

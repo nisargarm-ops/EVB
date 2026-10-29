@@ -2,44 +2,27 @@ import dotenv from 'dotenv';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Never override existing platform environment variables
-dotenv.config({ override: false });
+import { loadAppEnvironment, isPrivilegedSupabaseKey } from './src/server/envLoader.ts';
 
-const rawUrl = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
-const rawPubKey = (
-  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-  process.env.VITE_SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_PUBLISHABLE_KEY ||
-  process.env.SUPABASE_KEY ||
+// Load environment variables across standard files and AI Studio container files
+loadAppEnvironment();
+
+const rawUrl = (
+  process.env.VITE_SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
   ''
 ).trim();
 
-function isPrivilegedSupabaseKey(candidate: string): boolean {
-  if (!candidate) return true;
-  if (candidate.startsWith('sb_secret_')) return true;
-  if (
-    process.env.SUPABASE_SECRET_KEY &&
-    candidate === process.env.SUPABASE_SECRET_KEY.trim()
-  ) {
-    return true;
-  }
-  if (
-    process.env.SUPABASE_SERVICE_ROLE_KEY &&
-    candidate === process.env.SUPABASE_SERVICE_ROLE_KEY.trim()
-  ) {
-    return true;
-  }
-  const parts = candidate.split('.');
-  if (parts.length === 3) {
-    try {
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-      if (payload?.role === 'service_role') return true;
-    } catch {
-      // ignore malformed JWT
-    }
-  }
-  return false;
-}
+const rawPubKey = (
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_PUBLISHABLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_KEY ||
+  ''
+).trim();
 
 const safePubKey = isPrivilegedSupabaseKey(rawPubKey) ? '' : rawPubKey;
 

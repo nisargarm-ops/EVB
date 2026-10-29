@@ -12,6 +12,7 @@ import { AuthModal } from './components/AuthModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
 import { UserRole, UserProfile, DatabaseStatus } from './types';
 import { api } from './services/api';
+import { initSupabaseClient } from './services/supabaseClient';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
@@ -31,6 +32,13 @@ export const App: React.FC = () => {
   useEffect(() => {
     // Check initial user profile & db connectivity
     const initApp = async () => {
+      // Hydrate client-side Supabase authentication configuration from backend
+      try {
+        await initSupabaseClient();
+      } catch (err) {
+        console.warn('Supabase client hydration deferred:', err);
+      }
+
       try {
         const user = await api.getMe();
         setCurrentUser(user);

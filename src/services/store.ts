@@ -1,4 +1,4 @@
-import {
+import type {
   BatteryPassport,
   PassportSummary,
   CustodyEvent,
@@ -7,14 +7,14 @@ import {
   AuditVerification,
   PublicVerification,
   Organization
-} from '../types';
+} from '../types/index.ts';
 import {
   GENESIS_PREV_HASH,
   calculateEventHash,
   generateImmutableBatteryId,
   verifyChainIntegrity,
-} from './hasher';
-import { safeStorage } from './safeStorage';
+} from './hasher.ts';
+import { safeStorage } from './safeStorage.ts';
 
 const STORAGE_KEY_PASSPORTS = 'bp360_passports_v2';
 const STORAGE_KEY_CUSTODY = 'bp360_custody_events_v2';

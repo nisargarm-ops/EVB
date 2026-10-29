@@ -26,9 +26,11 @@ import type { AuthenticatedActor } from './auth.ts';
 import {
   ROLE_DEFAULT_ORGS,
   ROLE_PROFILE_UUIDS,
+  actorToProfile,
   normalizeUserRole,
   roleToDbProfileRole,
 } from './auth.ts';
+import { getAdminSupabaseConfig } from './envLoader.ts';
 
 export class DomainError extends Error {
   statusCode: number;
@@ -53,40 +55,22 @@ export class SupabaseBackendRepository {
   private seedPromise: Promise<void> | null = null;
 
   private resolveServerSecretKey(): string {
-    const candidates = [
-      process.env.SUPABASE_SECRET_KEY,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      process.env.SUPABASE_KEY,
-    ];
-    for (const raw of candidates) {
-      const val = (raw || '').trim();
-      if (
-        val &&
-        !val.startsWith('sb_publishable_') &&
-        !val.includes('your_public_key') &&
-        !val.includes('your_server_only')
-      ) {
-        return val;
-      }
-    }
-    return '';
+    return getAdminSupabaseConfig().supabaseSecretKey;
   }
 
   private getAdminClient(): SupabaseClient {
     if (this.client) return this.client;
 
-    const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
-    const secretKey = this.resolveServerSecretKey();
-
-    if (!url || !secretKey || url.includes('your-project')) {
+    const adminConfig = getAdminSupabaseConfig();
+    if (!adminConfig.isConfigured) {
       throw new DomainError(
-        'Supabase server credentials (SUPABASE_URL and SUPABASE_SECRET_KEY) are not configured.',
+        `Supabase server credentials are not configured (${adminConfig.missingVars.join(', ')}).`,
         503
       );
     }
 
-    this.supabaseUrl = url;
-    this.client = createClient(url, secretKey, {
+    this.supabaseUrl = adminConfig.supabaseUrl;
+    this.client = createClient(adminConfig.supabaseUrl, adminConfig.supabaseSecretKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -96,11 +80,125 @@ export class SupabaseBackendRepository {
   }
 
   isConfigured(): boolean {
-    const forceMemory = String(process.env.FORCE_MEMORY_DB || 'false').toLowerCase() === 'true';
-    if (forceMemory) return false;
-    const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
-    const key = this.resolveServerSecretKey();
-    return Boolean(url && key && url.startsWith('http') && !url.includes('your-project'));
+    return getAdminSupabaseConfig().isConfigured;
+  }
+
+  /**
+   * Registers a new user via Supabase Auth and provisions their tenant profile & organization.
+   */
+  async signUpUser(payload: {
+    email: string;
+    password: string;
+    fullName: string;
+    role: UserRole;
+    organization: string;
+  }): Promise<{ user: any; session: any; profile: import('../types/index.ts').UserProfile }> {
+    if (!this.isConfigured()) {
+      throw new DomainError('Supabase Auth is not configured in this environment.', 503);
+    }
+    await this.ensureSeeded();
+    const db = this.getAdminClient();
+
+    const { data, error } = await db.auth.signUp({
+      email: payload.email,
+      password: payload.password,
+      options: {
+        data: {
+          full_name: payload.fullName,
+          role: payload.role,
+          organization_name: payload.organization,
+        },
+      },
+    });
+
+    if (error) {
+      throw new DomainError(error.message, 400);
+    }
+
+    if (!data.user) {
+      throw new DomainError('Failed to create user in Supabase Auth.', 500);
+    }
+
+    const org = await this.resolveOrCreateOrganization(payload.organization, payload.role);
+    const actor = await this.resolveOrSyncSupabaseUser(
+      data.user.id,
+      data.user.email || payload.email,
+      {
+        full_name: payload.fullName,
+        role: payload.role,
+        organization_id: org.id,
+        organization_name: org.name,
+      },
+      data.session?.access_token
+    );
+
+    const userProfile: import('../types/index.ts').UserProfile = actor
+      ? actorToProfile(actor)
+      : {
+          id: data.user.id,
+          email: data.user.email || payload.email,
+          full_name: payload.fullName,
+          role: payload.role,
+          organization_id: org.id,
+          organization_name: org.name,
+        };
+
+    return {
+      user: data.user,
+      session: data.session,
+      profile: userProfile,
+    };
+  }
+
+  /**
+   * Signs in an existing user via Supabase Auth and returns active session & synchronized profile.
+   */
+  async signInUser(
+    email: string,
+    password: string
+  ): Promise<{ user: any; session: any; profile: import('../types/index.ts').UserProfile }> {
+    if (!this.isConfigured()) {
+      throw new DomainError('Supabase Auth is not configured in this environment.', 503);
+    }
+    await this.ensureSeeded();
+    const db = this.getAdminClient();
+
+    const { data, error } = await db.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      throw new DomainError(error.message, 401);
+    }
+
+    if (!data.user) {
+      throw new DomainError('Invalid credentials.', 401);
+    }
+
+    const actor = await this.resolveOrSyncSupabaseUser(
+      data.user.id,
+      data.user.email || email,
+      (data.user.user_metadata as Record<string, any>) || {},
+      data.session?.access_token
+    );
+
+    const userProfile: import('../types/index.ts').UserProfile = actor
+      ? actorToProfile(actor)
+      : {
+          id: data.user.id,
+          email: data.user.email || email,
+          full_name: String(data.user.user_metadata?.full_name || email.split('@')[0]),
+          role: normalizeUserRole(data.user.user_metadata?.role),
+          organization_id: String(data.user.user_metadata?.organization_id || ''),
+          organization_name: String(data.user.user_metadata?.organization_name || 'Enterprise'),
+        };
+
+    return {
+      user: data.user,
+      session: data.session,
+      profile: userProfile,
+    };
   }
 
   /**

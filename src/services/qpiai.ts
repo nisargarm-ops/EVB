@@ -13,10 +13,24 @@ export const SUPPORTED_QCLOUD_BACKENDS = [
   'QpiAI-Indus-1',
 ] as const;
 
+const QPIAI_ENV_ALIASES: Record<string, string[]> = {
+  QPIAI_OPT_API_KEY: ['QPIAI_OPT_API_KEY', 'OPT_API_KEY', 'QPIAI_OPT_KEY'],
+  QPIAI_OPT_URL: ['QPIAI_OPT_URL', 'OPT_URL', 'QPIAI_OPT_ENDPOINT'],
+  QPIAI_QUANTUM_API_KEY: ['QPIAI_QUANTUM_API_KEY', 'QPIAI_QCLOUD_API_KEY', 'QCLOUD_API_KEY', 'QPIAI_QUANTUM_KEY'],
+  QPIAI_QUANTUM_BACKEND: ['QPIAI_QUANTUM_BACKEND', 'QPIAI_QCLOUD_BACKEND', 'QUANTUM_BACKEND'],
+  QPIAI_QCLOUD_URL: ['QPIAI_QCLOUD_URL', 'QCLOUD_SERVER_URL', 'QPIAI_QUANTUM_URL'],
+};
+
 function readServerEnv(serverKey: string): string {
   try {
-    if (typeof process !== 'undefined' && process.env && process.env[serverKey]) {
-      return String(process.env[serverKey]).trim();
+    if (typeof process !== 'undefined' && process.env) {
+      const aliases = QPIAI_ENV_ALIASES[serverKey] || [serverKey];
+      for (const key of aliases) {
+        const val = process.env[key];
+        if (typeof val === 'string' && val.trim()) {
+          return val.trim();
+        }
+      }
     }
   } catch {
     // Ignore in browser environment

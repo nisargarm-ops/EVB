@@ -12,9 +12,14 @@ import {
   UserProfile,
   Organization,
   DatabaseStatus,
-  IntegrationsStatus,
 } from '../types';
-import { supabase, isSupabaseConfigured, getActiveSupabaseConfig } from './supabaseClient';
+import {
+  supabase,
+  isSupabaseConfigured,
+  getActiveSupabaseConfig,
+  initSupabaseClient,
+  getSupabase,
+} from './supabaseClient';
 import { batteryRepository } from './store';
 import { QpiAIOptEngine, QpiAIQuantumEngine } from './qpiai';
 import { safeStorage } from './safeStorage';
@@ -226,46 +231,6 @@ export const api = {
     };
   },
 
-  async getIntegrationsStatus(): Promise<IntegrationsStatus> {
-    if (isBrowserRuntime) {
-      try {
-        return await backendFetch<IntegrationsStatus>('/integrations/status');
-      } catch (err: any) {
-        const dbStatus = await this.getDatabaseStatus();
-        return {
-          supabase: dbStatus,
-          qpiai_opt: {
-            configured: false,
-            endpoint: 'https://opt-server.qpiai.tech/api',
-            message: `Integration status probe failed: ${err.message}`,
-          },
-          qpiai_qcloud: {
-            configured: false,
-            endpoint: 'https://qcloud-server.qpiai.tech',
-            default_backend: 'QpiAI-QSV-Local',
-            supported_backends: ['QpiAI-QSV-Local', 'QpiAI-QSV-Simulator'],
-            message: `Integration status probe failed: ${err.message}`,
-          },
-          checked_at: new Date().toISOString(),
-        };
-      }
-    }
-    const dbStatus = await this.getDatabaseStatus();
-    return {
-      supabase: dbStatus,
-      qpiai_opt: {
-        configured: false,
-        endpoint: 'https://opt-server.qpiai.tech/api',
-      },
-      qpiai_qcloud: {
-        configured: false,
-        endpoint: 'https://qcloud-server.qpiai.tech',
-        default_backend: 'QpiAI-QSV-Local',
-      },
-      checked_at: new Date().toISOString(),
-    };
-  },
-
   // --------------------------------------------------------------------------
   // Supabase & Backend Authentication
   // --------------------------------------------------------------------------
@@ -277,24 +242,147 @@ export const api = {
     organizationName?: string
   ) {
     const resolvedOrg = organizationName || ROLE_DEFAULT_ORGS[role];
-    if (supabase && isSupabaseConfigured) {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
+
+    // Ensure client has fetched runtime auth config if not initialized at build time
+    let client = getSupabase();
+    if (!client) {
+      client = await initSupabaseClient();
+    }
+
+    if (client && isSupabaseConfigured) {
+      try {
+        const { data, error } = await client.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              role,
+              organization_name: resolvedOrg,
+            },
+          },
+        });
+        if (error) throw new Error(error.message);
+
+        if (data.session?.access_token) {
+          setAuthToken(data.session.access_token);
+          if (isBrowserRuntime) {
+            try {
+              const synced = await backendFetch<UserProfile>(
+                '/auth/sync-profile',
+                { method: 'POST' },
+                true
+              );
+              activeUser = synced;
+              currentRole = synced.role;
+              currentOrg = synced.organization_name;
+              safeStorage.setItem('bp360_active_role', currentRole);
+              safeStorage.setItem('bp360_active_org', currentOrg);
+              await this.fetchOrganizations().catch(() => {});
+            } catch {
+              // Profile will sync on next authenticated call
+            }
+          }
+        } else if (data.user) {
+          activeUser = {
+            id: data.user.id,
+            email: data.user.email || email,
             full_name: fullName,
             role,
+            organization_id: `org-${role.toLowerCase()}`,
             organization_name: resolvedOrg,
-          },
-        },
-      });
-      if (error) throw new Error(error.message);
-
-      if (data.session?.access_token) {
-        setAuthToken(data.session.access_token);
-        if (isBrowserRuntime) {
+          };
+          currentRole = role;
+          currentOrg = resolvedOrg;
+          safeStorage.setItem('bp360_active_role', currentRole);
+          safeStorage.setItem('bp360_active_org', currentOrg);
+        }
+        return data;
+      } catch (clientErr: any) {
+        // If client-side direct request fails due to browser restrictions, attempt backend signup proxy
+        if (
+          isBrowserRuntime &&
+          (clientErr.message?.includes('fetch') ||
+            clientErr.message?.includes('network') ||
+            clientErr.message?.includes('Failed to fetch'))
+        ) {
           try {
+            const backendRes = await backendFetch<{ user: any; session: any; profile: UserProfile }>(
+              '/auth/signup',
+              {
+                method: 'POST',
+                body: JSON.stringify({ email, password, fullName, role, organization: resolvedOrg }),
+              }
+            );
+            if (backendRes.session?.access_token) {
+              setAuthToken(backendRes.session.access_token);
+            }
+            if (backendRes.profile) {
+              activeUser = backendRes.profile;
+              currentRole = backendRes.profile.role;
+              currentOrg = backendRes.profile.organization_name;
+              safeStorage.setItem('bp360_active_role', currentRole);
+              safeStorage.setItem('bp360_active_org', currentOrg);
+            }
+            return backendRes;
+          } catch {
+            throw clientErr;
+          }
+        }
+        throw clientErr;
+      }
+    }
+
+    // Try backend signup endpoint if server environment has credentials configured
+    if (isBrowserRuntime) {
+      try {
+        const backendRes = await backendFetch<{ user: any; session: any; profile: UserProfile }>(
+          '/auth/signup',
+          {
+            method: 'POST',
+            body: JSON.stringify({ email, password, fullName, role, organization: resolvedOrg }),
+          }
+        );
+        if (backendRes.session?.access_token) {
+          setAuthToken(backendRes.session.access_token);
+        }
+        if (backendRes.profile) {
+          activeUser = backendRes.profile;
+          currentRole = backendRes.profile.role;
+          currentOrg = backendRes.profile.organization_name;
+          safeStorage.setItem('bp360_active_role', currentRole);
+          safeStorage.setItem('bp360_active_org', currentOrg);
+        }
+        return backendRes;
+      } catch (backendErr: any) {
+        if (!backendErr.message?.includes('503') && !backendErr.message?.includes('not configured')) {
+          throw backendErr;
+        }
+      }
+    }
+
+    throw new Error(
+      'Supabase Auth is not configured in this environment. Please configure SUPABASE_URL and SUPABASE_ANON_KEY (or SUPABASE_SERVICE_ROLE_KEY) in Google AI Studio environment settings.'
+    );
+  },
+
+  async signIn(email: string, password: string) {
+    let client = getSupabase();
+    if (!client) {
+      client = await initSupabaseClient();
+    }
+
+    if (client && isSupabaseConfigured) {
+      try {
+        const { data, error } = await client.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw new Error(error.message);
+
+        if (data.session?.access_token) {
+          setAuthToken(data.session.access_token);
+          if (isBrowserRuntime) {
             const synced = await backendFetch<UserProfile>(
               '/auth/sync-profile',
               { method: 'POST' },
@@ -305,58 +393,70 @@ export const api = {
             currentOrg = synced.organization_name;
             safeStorage.setItem('bp360_active_role', currentRole);
             safeStorage.setItem('bp360_active_org', currentOrg);
-            await this.fetchOrganizations().catch(() => {});
-          } catch {
-            // Profile will sync on next authenticated call
           }
         }
-      } else if (data.user) {
-        activeUser = {
-          id: data.user.id,
-          email: data.user.email || email,
-          full_name: fullName,
-          role,
-          organization_id: `org-${role.toLowerCase()}`,
-          organization_name: resolvedOrg,
-        };
-        currentRole = role;
-        currentOrg = resolvedOrg;
-        safeStorage.setItem('bp360_active_role', currentRole);
-        safeStorage.setItem('bp360_active_org', currentOrg);
+        return data;
+      } catch (clientErr: any) {
+        if (
+          isBrowserRuntime &&
+          (clientErr.message?.includes('fetch') ||
+            clientErr.message?.includes('network') ||
+            clientErr.message?.includes('Failed to fetch'))
+        ) {
+          const backendRes = await backendFetch<{ user: any; session: any; profile: UserProfile }>(
+            '/auth/signin',
+            {
+              method: 'POST',
+              body: JSON.stringify({ email, password }),
+            }
+          );
+          if (backendRes.session?.access_token) {
+            setAuthToken(backendRes.session.access_token);
+          }
+          if (backendRes.profile) {
+            activeUser = backendRes.profile;
+            currentRole = backendRes.profile.role;
+            currentOrg = backendRes.profile.organization_name;
+            safeStorage.setItem('bp360_active_role', currentRole);
+            safeStorage.setItem('bp360_active_org', currentOrg);
+          }
+          return backendRes;
+        }
+        throw clientErr;
       }
-      return data;
     }
 
-    throw new Error('Supabase Auth is not configured in this environment.');
-  },
-
-  async signIn(email: string, password: string) {
-    if (supabase && isSupabaseConfigured) {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) throw new Error(error.message);
-
-      if (data.session?.access_token) {
-        setAuthToken(data.session.access_token);
-        if (isBrowserRuntime) {
-          const synced = await backendFetch<UserProfile>(
-            '/auth/sync-profile',
-            { method: 'POST' },
-            true
-          );
-          activeUser = synced;
-          currentRole = synced.role;
-          currentOrg = synced.organization_name;
+    // Try backend signin endpoint if server has credentials
+    if (isBrowserRuntime) {
+      try {
+        const backendRes = await backendFetch<{ user: any; session: any; profile: UserProfile }>(
+          '/auth/signin',
+          {
+            method: 'POST',
+            body: JSON.stringify({ email, password }),
+          }
+        );
+        if (backendRes.session?.access_token) {
+          setAuthToken(backendRes.session.access_token);
+        }
+        if (backendRes.profile) {
+          activeUser = backendRes.profile;
+          currentRole = backendRes.profile.role;
+          currentOrg = backendRes.profile.organization_name;
           safeStorage.setItem('bp360_active_role', currentRole);
           safeStorage.setItem('bp360_active_org', currentOrg);
         }
+        return backendRes;
+      } catch (backendErr: any) {
+        if (!backendErr.message?.includes('503') && !backendErr.message?.includes('not configured')) {
+          throw backendErr;
+        }
       }
-      return data;
     }
 
-    throw new Error('Supabase Auth is not configured in this environment.');
+    throw new Error(
+      'Supabase Auth is not configured in this environment. Please configure SUPABASE_URL and SUPABASE_ANON_KEY in Google AI Studio environment settings.'
+    );
   },
 
   async signOut() {
