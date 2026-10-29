@@ -1,6 +1,6 @@
 {
   "name": "BatteryPass 360",
-  "description": "Cross-Enterprise EV Battery Passport & Lifecycle Metrology complying with EU Battery Regulation 2023/1542, featuring SHA-256 tamper-evident hash chaining, QpiAI-Opt QUBO reverse logistics, and QpiAI Quantum cathode degradation modeling.",
+  "description": "Cross-Enterprise EV Battery Passport & Lifecycle Metrology aligned with EU Battery Regulation (EU 2023/1542), featuring SHA-256 tamper-evident hash chaining, QpiAI-Opt QUBO reverse logistics, and QpiAI Quantum cathode degradation modeling.",
   "permissions": [],
   "capabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

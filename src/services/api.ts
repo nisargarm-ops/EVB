@@ -12,6 +12,7 @@ import {
   UserProfile,
   Organization,
   DatabaseStatus,
+  IntegrationsStatus,
 } from '../types';
 import { supabase, isSupabaseConfigured, getActiveSupabaseConfig } from './supabaseClient';
 import { batteryRepository } from './store';
@@ -222,6 +223,46 @@ export const api = {
       message: 'CLI test mode using local repository.',
       endpointUrl: config.url || undefined,
       lastChecked: new Date().toISOString(),
+    };
+  },
+
+  async getIntegrationsStatus(): Promise<IntegrationsStatus> {
+    if (isBrowserRuntime) {
+      try {
+        return await backendFetch<IntegrationsStatus>('/integrations/status');
+      } catch (err: any) {
+        const dbStatus = await this.getDatabaseStatus();
+        return {
+          supabase: dbStatus,
+          qpiai_opt: {
+            configured: false,
+            endpoint: 'https://opt-server.qpiai.tech/api',
+            message: `Integration status probe failed: ${err.message}`,
+          },
+          qpiai_qcloud: {
+            configured: false,
+            endpoint: 'https://qcloud-server.qpiai.tech',
+            default_backend: 'QpiAI-QSV-Local',
+            supported_backends: ['QpiAI-QSV-Local', 'QpiAI-QSV-Simulator'],
+            message: `Integration status probe failed: ${err.message}`,
+          },
+          checked_at: new Date().toISOString(),
+        };
+      }
+    }
+    const dbStatus = await this.getDatabaseStatus();
+    return {
+      supabase: dbStatus,
+      qpiai_opt: {
+        configured: false,
+        endpoint: 'https://opt-server.qpiai.tech/api',
+      },
+      qpiai_qcloud: {
+        configured: false,
+        endpoint: 'https://qcloud-server.qpiai.tech',
+        default_backend: 'QpiAI-QSV-Local',
+      },
+      checked_at: new Date().toISOString(),
     };
   },
 
