@@ -959,6 +959,128 @@ async function runTestSuite() {
     assert(false, 'Test 46', e.message);
   }
 
+  // --------------------------------------------------------------------------
+  // Test 47: Verification Rules Verification (Case 1, Case 2, Case 3, Case 5)
+  // --------------------------------------------------------------------------
+  try {
+    // Case 1: Correct QR + correct serial -> VERIFIED, passport details revealed
+    const case1Outcome = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-NMC-8A2F91C0',
+      { physical_serial: 'QV-2024-NMC-98124' },
+      { role: 'PUBLIC' }
+    );
+    const case1Valid =
+      case1Outcome.status === 'MATCHED' &&
+      case1Outcome.is_authentic === true &&
+      case1Outcome.passport_details !== null &&
+      case1Outcome.passport_details?.state_of_health_pct !== undefined;
+
+    // Case 2: Correct QR + incorrect serial -> IDENTITY MISMATCH, details hidden
+    const case2Outcome = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-NMC-8A2F91C0',
+      { physical_serial: 'QV-2024-NMC-WRONG' },
+      { role: 'PUBLIC' }
+    );
+    const case2Valid =
+      (case2Outcome.status === 'UNREGISTERED_SERIAL' || case2Outcome.status === 'MISMATCH_FRAUD') &&
+      case2Outcome.is_authentic === false &&
+      case2Outcome.passport_details === null &&
+      case2Outcome.registered_serial_number === undefined;
+
+    // Case 3: QR does not exist -> BATTERY NOT FOUND
+    let case3ThrowsNotFound = false;
+    try {
+      await batteryRepository.getTwoStepPrecheck('BAT-NONEXISTENT-999');
+    } catch (e: any) {
+      case3ThrowsNotFound = e.message.includes('not found');
+    }
+
+    // Case 5: Different battery's serial (Sticker Swap: Nordic Battery serial submitted for QV battery)
+    const case5Outcome = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-NMC-8A2F91C0',
+      { physical_serial: 'NBS-2023-LFP-44109' },
+      { role: 'PUBLIC' }
+    );
+    const case5Valid =
+      case5Outcome.fraud_detected === true &&
+      case5Outcome.fraud_type === 'QR_STICKER_SWAP_DETECTED' &&
+      case5Outcome.conflicting_battery_id === 'BAT-LFP-3C7D410E';
+
+    assert(
+      case1Valid && case2Valid && case3ThrowsNotFound && case5Valid,
+      'Test 47: Two-step verification rules (Case 1 Verified, Case 2 Mismatch, Case 3 Not Found, Case 5 Sticker Swap)'
+    );
+  } catch (e: any) {
+    assert(false, 'Test 47', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 48: Persisted Battery BAT-NMC8-A888D503 verification & serial normalization
+  // --------------------------------------------------------------------------
+  try {
+    // Seed BAT-NMC8-A888D503 in memory repo if not already present
+    let pass = await batteryRepository.getPassport('BAT-NMC8-A888D503');
+    if (!pass) {
+      pass = await batteryRepository.createPassport({
+        serial_number: 'SN-2026-NMC-78284',
+        manufacturer_name: 'QuantumVolt Gigafactory',
+        model_designation: 'QV-Pack-90X',
+        chemistry: 'NMC 811',
+        manufacturing_date: '2026-10-29T20:16:38Z',
+        manufacturing_country: 'DE',
+        manufacturing_facility: 'Berlin-Brandenburg Gigafactory',
+        current_custodian: 'QuantumVolt Gigafactory',
+      }, { role: 'MANUFACTURER', organization: 'QuantumVolt Gigafactory' });
+    }
+
+    // Step 1: Precheck resolves without revealing serial or protected health
+    const precheck = await batteryRepository.getTwoStepPrecheck(pass.battery_id);
+    const precheckValid =
+      precheck.battery_id === pass.battery_id &&
+      precheck.requires_physical_uid === true &&
+      (precheck as any).serial_number === undefined;
+
+    // Step 2a: Exact matching serial with hyphens
+    const matchHyphens = await batteryRepository.verifyPhysicalIdentity(
+      pass.battery_id,
+      { physical_serial: 'SN-2026-NMC-78284' },
+      { role: 'PUBLIC' }
+    );
+
+    // Step 2b: Matching alphanumeric serial without hyphens
+    const matchNoHyphens = await batteryRepository.verifyPhysicalIdentity(
+      pass.battery_id,
+      { physical_serial: 'SN2026NMC78284' },
+      { role: 'PUBLIC' }
+    );
+
+    // Step 2c: Incorrect serial rejected as mismatch
+    const mismatch = await batteryRepository.verifyPhysicalIdentity(
+      pass.battery_id,
+      { physical_serial: 'SN-2026-NMC-99999' },
+      { role: 'PUBLIC' }
+    );
+
+    const isTest48Passed =
+      precheckValid &&
+      matchHyphens.status === 'MATCHED' &&
+      matchHyphens.is_authentic === true &&
+      matchHyphens.passport_details !== null &&
+      matchNoHyphens.status === 'MATCHED' &&
+      matchNoHyphens.is_authentic === true &&
+      matchNoHyphens.passport_details !== null &&
+      mismatch.status === 'UNREGISTERED_SERIAL' &&
+      mismatch.is_authentic === false &&
+      mismatch.passport_details === null;
+
+    assert(
+      isTest48Passed,
+      "Test 48: Persisted battery BAT-NMC8-A888D503 verifies with 'SN-2026-NMC-78284' & 'SN2026NMC78284' and strictly hides details on mismatch"
+    );
+  } catch (e: any) {
+    assert(false, 'Test 48', e.message);
+  }
+
   console.log('\n----------------------------------------------------------------');
   console.log(`SUMMARY: ${passed} Passed, ${failed} Failed out of ${passed + failed} Tests`);
   console.log('----------------------------------------------------------------\n');

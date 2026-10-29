@@ -1274,6 +1274,13 @@ export class SupabaseBackendRepository {
       .maybeSingle();
     if (byDid) return byDid;
 
+    const { data: byIlike } = await db
+      .from('batteries')
+      .select('*')
+      .ilike('battery_id', trimmed)
+      .maybeSingle();
+    if (byIlike) return byIlike;
+
     // Resilient fallback to memory repository when running locally or during development
     const fromStore = await batteryRepository.getPassport(trimmed);
     if (fromStore) {

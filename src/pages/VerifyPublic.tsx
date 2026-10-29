@@ -109,7 +109,12 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
       setPrecheck(pre);
       setVerifiedNonce(Math.random().toString(36).substring(2, 10).toUpperCase());
     } catch (err: any) {
-      setError(err.message || 'Battery passport reference could not be resolved from registry.');
+      const msg = err.message || '';
+      if (msg.includes('not found') || msg.includes('404')) {
+        setError(`Battery Not Found: Digital passport '${idToVerify.trim()}' is not registered in the authoritative database.`);
+      } else {
+        setError(`Service Error: ${msg || 'Failed to communicate with verification backend.'}`);
+      }
       setPrecheck(null);
       setResult(null);
     } finally {
@@ -205,7 +210,11 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
         } : null);
         setPhysicalError(err.message || 'Battery is locked due to excessive failed verification attempts. Flagged as Suspicious — Verification Required.');
       } else {
-        setPhysicalError(err.message || 'Physical identity verification failed.');
+        const msg = err.message || '';
+        const displayMsg = msg.startsWith('Service Error') || msg.startsWith('API endpoint')
+          ? msg
+          : `Service Error: ${msg || 'Physical identity verification service unreachable.'}`;
+        setPhysicalError(displayMsg);
       }
       setResult(null);
     } finally {

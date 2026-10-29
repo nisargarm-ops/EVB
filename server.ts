@@ -933,7 +933,7 @@ async function startServer() {
   }
 
   const port = 3000;
-  app.listen(port, 'localhost', () => {
+  app.listen(port, '0.0.0.0', () => {
     console.log(`BatteryPass 360 full-stack server listening on http://localhost:${port}`);
   });
 }
