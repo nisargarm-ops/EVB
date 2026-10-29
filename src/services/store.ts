@@ -578,6 +578,17 @@ export class BatteryRepository {
       }
     }
 
+    // Prevent duplicate serial numbers
+    const cleanSerial = String(payload.serial_number || '').trim().toLowerCase();
+    const existing = Array.from(this.passports.values()).find(
+      p => p.serial_number.trim().toLowerCase() === cleanSerial
+    );
+    if (existing) {
+      throw new Error(
+        `Duplicate registration rejected: Battery with serial '${payload.serial_number}' is already registered under passport ID '${existing.battery_id}'. Each battery pack must possess a unique serial number.`
+      );
+    }
+
     const now = new Date().toISOString();
     const { did, shortId } = generateImmutableBatteryId(
       payload.manufacturer_name,

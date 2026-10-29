@@ -47,58 +47,58 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-xl glass-panel bg-slate-900/95 border border-slate-700/80 rounded-2xl p-6 shadow-2xl space-y-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
+      <div className="relative w-full max-w-xl bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-xl space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-4">
           <div className="flex items-center space-x-3">
             <div
               className={`p-2.5 rounded-xl border ${
                 status?.isConnected
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                  : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                  ? 'bg-[#ECFDF3] border-[#D1FAE5] text-[#059669]'
+                  : 'bg-[#FEF3C7] border-[#FDE68A] text-[#D97706]'
               }`}
             >
               <Database className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-base font-bold text-white tracking-tight">
+                <h2 className="text-base font-bold text-[#14532D] tracking-tight">
                   Database & Persistence Architecture
                 </h2>
                 <span
-                  className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-semibold ${
                     status?.isConnected
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                      : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      ? 'bg-[#ECFDF3] text-[#059669] border-[#D1FAE5]'
+                      : 'bg-[#FEF3C7] text-[#D97706] border-[#FDE68A]'
                   }`}
                 >
                   {status?.provider || 'PROBING...'}
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-[#64748B]">
                 Supabase PostgreSQL • Backend Proxy (`/api/v1`) • JWKS & RLS
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-[#64748B] hover:text-[#1F2937] hover:bg-[#F8FAF7] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Live Diagnostics Card */}
-        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+        <div className="p-4 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB] space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+            <span className="text-xs font-bold text-[#1F2937] uppercase tracking-wider">
               Backend & Supabase Connectivity
             </span>
             <button
               onClick={checkStatus}
               disabled={probing}
-              className="flex items-center space-x-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+              className="flex items-center space-x-1.5 text-xs text-[#059669] hover:text-[#14532D] font-semibold transition-colors"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${probing ? 'animate-spin' : ''}`} />
               <span>{probing ? 'Probing...' : 'Re-test Connection'}</span>
@@ -107,18 +107,18 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
 
           <div className="flex items-start space-x-3 pt-1">
             {status?.isConnected ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-5 h-5 text-[#059669] shrink-0 mt-0.5" />
             ) : (
-              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-5 h-5 text-[#D97706] shrink-0 mt-0.5" />
             )}
             <div className="text-xs space-y-1">
-              <p className="text-slate-200 font-medium leading-relaxed">{status?.message}</p>
+              <p className="text-[#1F2937] font-medium leading-relaxed">{status?.message}</p>
               {status?.endpointUrl && (
-                <p className="text-[11px] text-slate-400 font-mono">
-                  Project: <span className="text-cyan-400">{status.endpointUrl}</span>
+                <p className="text-[11px] text-[#64748B] font-mono">
+                  Project: <span className="text-[#14532D] font-semibold">{status.endpointUrl}</span>
                 </p>
               )}
-              <p className="text-[10px] text-slate-500">
+              <p className="text-[10px] text-[#94A3B8]">
                 Last verified:{' '}
                 {status?.lastChecked
                   ? new Date(status.lastChecked).toLocaleTimeString()
@@ -130,19 +130,19 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
 
         {/* Database Tables & Migrations Architecture */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+          <div className="flex items-center justify-between text-xs font-bold text-[#1F2937]">
             <span className="flex items-center space-x-1.5">
-              <Layers className="w-4 h-4 text-cyan-400" />
+              <Layers className="w-4 h-4 text-[#059669]" />
               <span>Managed PostgreSQL Schema & Triggers</span>
             </span>
-            <span className="text-[11px] font-mono text-emerald-400">
+            <span className="text-[11px] font-mono text-[#059669]">
               {status?.tables
                 ? `${status.tables.filter((t) => t.exists).length}/${status.tables.length} Tables Active • RLS`
                 : 'Probing Schema...'}
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] font-mono text-slate-300">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] font-mono">
             {(
               status?.tables ||
               [
@@ -161,27 +161,27 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
             ).map((tbl) => (
               <div
                 key={tbl.name}
-                className="p-2 rounded-lg bg-slate-950/80 border border-slate-800 flex items-center justify-between"
+                className="p-2 rounded-lg bg-white border border-[#E5E7EB] flex items-center justify-between shadow-sm"
               >
-                <span className="truncate mr-1">{tbl.name}</span>
+                <span className="truncate mr-1 text-[#1F2937]">{tbl.name}</span>
                 {tbl.exists ? (
-                  <span className="text-emerald-400 shrink-0">
+                  <span className="text-[#059669] font-bold shrink-0">
                     ✓{tbl.rowCount !== null ? ` (${tbl.rowCount})` : ' RLS'}
                   </span>
                 ) : (
-                  <span className="text-amber-400 shrink-0 text-[10px]">Pending</span>
+                  <span className="text-[#D97706] shrink-0 text-[10px] font-bold">Pending</span>
                 )}
               </div>
             ))}
           </div>
         </div>
 
-        <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center space-x-2.5 text-xs text-slate-400">
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+        <div className="p-3.5 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB] flex items-center space-x-2.5 text-xs text-[#64748B]">
+          <ShieldCheck className="w-4 h-4 text-[#059669] shrink-0" />
           <span>
-            Credentials (<code className="text-slate-300 font-mono">SUPABASE_SECRET_KEY</code> &{' '}
-            <code className="text-slate-300 font-mono">SUPABASE_JWKS_URL</code>) are isolated
-            server-side behind <code className="text-cyan-400 font-mono">/api/v1</code> routes.
+            Credentials (<code className="text-[#1F2937] font-mono font-semibold">SUPABASE_SECRET_KEY</code> &{' '}
+            <code className="text-[#1F2937] font-mono font-semibold">SUPABASE_JWKS_URL</code>) are isolated
+            server-side behind <code className="text-[#14532D] font-mono font-bold">/api/v1</code> routes.
           </span>
         </div>
       </div>

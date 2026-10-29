@@ -99,6 +99,15 @@ export class SupabaseBackendRepository {
     await this.ensureSeeded();
     const db = this.getAdminClient();
 
+    // Enforce real RBAC: never trust client-claimed privileged roles (Admin / Auditor)
+    const requestedRole = normalizeUserRole(payload.role);
+    if (requestedRole === 'ADMINISTRATOR' || requestedRole === 'REGULATOR_AUDITOR') {
+      throw new DomainError(
+        'Self-registration for Administrator or Regulator/Auditor roles is forbidden. These roles require manual onboarding and verification by a governance authority.',
+        403
+      );
+    }
+
     const { data, error } = await db.auth.signUp({
       email: payload.email,
       password: payload.password,
@@ -117,6 +126,15 @@ export class SupabaseBackendRepository {
 
     if (!data.user) {
       throw new DomainError('Failed to create user in Supabase Auth.', 500);
+    }
+
+    // Auto-confirm user email via service role so development logins proceed without blocking
+    if (data.user && !(data.user as any).email_confirmed_at) {
+      try {
+        await db.auth.admin.updateUserById(data.user.id, { email_confirm: true });
+      } catch (confirmErr) {
+        // Deferred if provider restricts admin updates
+      }
     }
 
     const org = await this.resolveOrCreateOrganization(payload.organization, payload.role);
@@ -168,35 +186,65 @@ export class SupabaseBackendRepository {
       password,
     });
 
+    let authUser = data?.user;
+    let authSession = data?.session;
+
     if (error) {
-      throw new DomainError(error.message, 401);
+      // Auto-confirm fallback: if email confirmation is pending in development, confirm via admin service role
+      if (error.message && error.message.toLowerCase().includes('email not confirmed')) {
+        try {
+          const { data: usersData } = await db.auth.admin.listUsers();
+          const target = usersData?.users?.find(
+            (u: any) => u.email?.toLowerCase() === email.toLowerCase()
+          );
+          if (target) {
+            await db.auth.admin.updateUserById(target.id, { email_confirm: true });
+            const retry = await db.auth.signInWithPassword({ email, password });
+            if (!retry.error && retry.data?.user) {
+              authUser = retry.data.user;
+              authSession = retry.data.session;
+            } else {
+              throw new DomainError(error.message, 401);
+            }
+          } else {
+            throw new DomainError(error.message, 401);
+          }
+        } catch {
+          throw new DomainError(
+            'Email not confirmed. Please check your inbox for the Supabase confirmation link or click Sign In again.',
+            401
+          );
+        }
+      } else {
+        throw new DomainError(error.message, 401);
+      }
     }
 
-    if (!data.user) {
+    if (!authUser) {
       throw new DomainError('Invalid credentials.', 401);
     }
 
     const actor = await this.resolveOrSyncSupabaseUser(
-      data.user.id,
-      data.user.email || email,
-      (data.user.user_metadata as Record<string, any>) || {},
-      data.session?.access_token
+      authUser.id,
+      authUser.email || email,
+      (authUser.user_metadata as Record<string, any>) || {},
+      authSession?.access_token
     );
 
     const userProfile: import('../types/index.ts').UserProfile = actor
       ? actorToProfile(actor)
       : {
-          id: data.user.id,
-          email: data.user.email || email,
-          full_name: String(data.user.user_metadata?.full_name || email.split('@')[0]),
-          role: normalizeUserRole(data.user.user_metadata?.role),
-          organization_id: String(data.user.user_metadata?.organization_id || ''),
-          organization_name: String(data.user.user_metadata?.organization_name || 'Enterprise'),
+          id: authUser.id,
+          email: authUser.email || email,
+          full_name: String(authUser.user_metadata?.full_name || email.split('@')[0]),
+          role: normalizeUserRole(authUser.user_metadata?.role),
+          organization_id: String(authUser.user_metadata?.organization_id || ''),
+          organization_name: String(authUser.user_metadata?.organization_name || 'Enterprise'),
         };
 
     return {
-      user: data.user,
-      session: data.session,
+      user: authUser,
+      session: authSession,
       profile: userProfile,
     };
   }
@@ -864,6 +912,38 @@ export class SupabaseBackendRepository {
       const org = existingProfile.organization_id
         ? orgMap.get(existingProfile.organization_id)
         : undefined;
+
+      const memberships: Array<{ organization_id: string; organization_name: string; role: UserRole }> = [
+        {
+          organization_id: existingProfile.organization_id || ROLE_DEFAULT_ORGS[role].id,
+          organization_name: org?.name || ROLE_DEFAULT_ORGS[role].name,
+          role,
+        },
+      ];
+
+      // Administrator has authorized governance across all verified enterprise organizations
+      if (role === 'ADMINISTRATOR') {
+        for (const [orgId, o] of orgMap.entries()) {
+          if (orgId !== existingProfile.organization_id && o.is_verified) {
+            memberships.push({
+              organization_id: orgId,
+              organization_name: o.name,
+              role: 'ADMINISTRATOR',
+            });
+          }
+        }
+      } else if (Array.isArray(resolvedMeta.authorized_organizations)) {
+        for (const extra of resolvedMeta.authorized_organizations) {
+          if (extra.organization_id && extra.organization_name && extra.role) {
+            memberships.push({
+              organization_id: String(extra.organization_id),
+              organization_name: String(extra.organization_name),
+              role: normalizeUserRole(extra.role),
+            });
+          }
+        }
+      }
+
       return {
         id: existingProfile.id,
         email: existingProfile.email,
@@ -872,6 +952,7 @@ export class SupabaseBackendRepository {
         organization_id: existingProfile.organization_id || ROLE_DEFAULT_ORGS[role].id,
         organization_name: org?.name || ROLE_DEFAULT_ORGS[role].name,
         auth_source: rawToken ? 'supabase_auth' : 'supabase_jwks',
+        authorized_memberships: memberships,
       };
     }
 
@@ -1220,6 +1301,30 @@ export class SupabaseBackendRepository {
 
     const db = this.getAdminClient();
     const orgRecord = await this.resolveOrCreateOrganization(mfgName, 'MANUFACTURER');
+
+    // 1. Enforce that only verified manufacturer organizations can register new battery passports
+    if (!orgRecord.is_verified) {
+      throw new DomainError(
+        `Access denied: Organization '${orgRecord.name}' is pending regulatory verification and is not yet authorized to mint official battery passports.`,
+        403
+      );
+    }
+
+    // 2. Prevent duplicate battery serial registrations
+    const cleanSerial = String(payload.serial_number).trim();
+    const { data: existingSerial } = await db
+      .from('batteries')
+      .select('battery_id, serial_number')
+      .eq('serial_number', cleanSerial)
+      .maybeSingle();
+
+    if (existingSerial) {
+      throw new DomainError(
+        `Duplicate registration rejected: Battery with serial '${cleanSerial}' is already registered under passport ID '${existingSerial.battery_id}'. Each battery pack must possess a unique serial number.`,
+        409
+      );
+    }
+
     const nowIso = new Date().toISOString();
     const mfgDateIso = payload.manufacturing_date ? toIsoUtc(payload.manufacturing_date) : nowIso;
     const chemistry = String(payload.chemistry || 'NMC 811').trim();

@@ -10,6 +10,11 @@ export interface AuthenticatedActor {
   organization_id: string;
   organization_name: string;
   auth_source: 'supabase_jwks' | 'supabase_auth' | 'server_jwt';
+  authorized_memberships?: Array<{
+    organization_id: string;
+    organization_name: string;
+    role: UserRole;
+  }>;
 }
 
 export interface AuthRequest extends Request {
@@ -370,5 +375,12 @@ export function actorToProfile(actor: AuthenticatedActor): UserProfile {
     role: actor.role,
     organization_id: actor.organization_id,
     organization_name: actor.organization_name,
+    authorized_memberships: actor.authorized_memberships || [
+      {
+        organization_id: actor.organization_id,
+        organization_name: actor.organization_name,
+        role: actor.role,
+      },
+    ],
   };
 }

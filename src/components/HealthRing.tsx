@@ -24,44 +24,40 @@ export const HealthRing: React.FC<HealthRingProps> = ({
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (clampedValue / 100) * circumference;
 
-  // Determine gradient colors and tier grade
+  // Determine colors and tier grade according to Option A palette
   const getHealthMeta = () => {
     if (clampedValue >= 85) {
       return { 
-        start: '#10B981', 
-        end: '#06B6D4', 
-        glow: 'rgba(16, 185, 129, 0.25)', 
+        start: '#14532D', 
+        end: '#059669', 
         grade: 'GRADE A+',
-        gradeColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+        gradeColor: 'text-[#059669] bg-[#ECFDF3] border-[#D1FAE5]',
         statusText: 'Optimal In-Vehicle Service'
       };
     }
     if (clampedValue >= 75) {
       return { 
-        start: '#06B6D4', 
-        end: '#3B82F6', 
-        glow: 'rgba(6, 182, 212, 0.25)', 
+        start: '#059669', 
+        end: '#0D9488', 
         grade: 'GRADE A',
-        gradeColor: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
+        gradeColor: 'text-[#0D9488] bg-[#F0FDFA] border-[#CCFBF1]',
         statusText: 'BESS Second-Life Candidate'
       };
     }
     if (clampedValue >= 65) {
       return { 
-        start: '#F59E0B', 
-        end: '#D97706', 
-        glow: 'rgba(245, 158, 11, 0.25)', 
+        start: '#D97706', 
+        end: '#B45309', 
         grade: 'GRADE B',
-        gradeColor: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+        gradeColor: 'text-[#D97706] bg-[#FEF3C7] border-[#FDE68A]',
         statusText: 'Reconditioning Recommended'
       };
     }
     return { 
-      start: '#EF4444', 
-      end: '#DC2626', 
-      glow: 'rgba(239, 68, 68, 0.25)', 
+      start: '#DC2626', 
+      end: '#991B1B', 
       grade: 'EOL RECYCLE',
-      gradeColor: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
+      gradeColor: 'text-[#DC2626] bg-[#FEE2E2] border-[#FECACA]',
       statusText: 'Hydrometallurgical Recovery'
     };
   };
@@ -83,7 +79,6 @@ export const HealthRing: React.FC<HealthRingProps> = ({
         height={size}
         viewBox={`0 0 ${size} ${size}`}
         className="rotate-[-90deg] overflow-visible"
-        style={{ filter: `drop-shadow(0 0 14px ${meta.glow})` }}
       >
         <defs>
           <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -92,38 +87,14 @@ export const HealthRing: React.FC<HealthRingProps> = ({
           </linearGradient>
         </defs>
 
-        {/* Outer subtle ticks circle */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius + 4}
-          fill="transparent"
-          stroke="#1E293B"
-          strokeWidth={1}
-          strokeDasharray="2 6"
-          opacity={0.4}
-        />
-
         {/* Background track */}
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           fill="transparent"
-          stroke="#0F172A"
+          stroke="#E5E7EB"
           strokeWidth={strokeWidth}
-          className="opacity-90"
-        />
-
-        {/* Track border ring */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="transparent"
-          stroke="#1E293B"
-          strokeWidth={1}
-          opacity={0.6}
         />
 
         {/* Foreground animated meter */}
@@ -145,17 +116,17 @@ export const HealthRing: React.FC<HealthRingProps> = ({
 
       {showLabel && (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white flex items-baseline">
+          <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-[#1F2937] flex items-baseline">
             <span>{clampedValue.toFixed(1)}</span>
-            <span className="text-xs font-semibold text-slate-400 ml-0.5">%</span>
+            <span className="text-xs font-semibold text-[#64748B] ml-0.5">%</span>
           </div>
           {subLabel && (
-            <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mt-0.5">
+            <div className="text-[10px] uppercase font-bold tracking-wider text-[#64748B] mt-0.5">
               {subLabel}
             </div>
           )}
           {gradeBadge && (
-            <div className={`mt-1 text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full border ${meta.gradeColor}`}>
+            <div className={`mt-1 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border ${meta.gradeColor}`}>
               {meta.grade}
             </div>
           )}

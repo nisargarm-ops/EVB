@@ -5,13 +5,8 @@ import {
   Search, 
   CheckCircle2, 
   ShieldCheck, 
-  Lock, 
-  Key, 
-  Layers, 
   Check, 
-  X as CloseIcon,
-  Cpu,
-  FileCheck2
+  X as CloseIcon
 } from 'lucide-react';
 import { Organization, UserRole } from '../types';
 import { api } from '../services/api';
@@ -161,20 +156,20 @@ export const Organizations: React.FC = () => {
       {/* Header & Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-white tracking-tight">Enterprise & Access Governance</h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <h1 className="text-2xl font-extrabold text-[#14532D] tracking-tight">Enterprise & Access Governance</h1>
+          <p className="text-xs text-[#64748B] mt-1">
             Certified manufacturers, OEMs, service hubs, and accredited European Union regulatory bodies.
           </p>
         </div>
 
         {/* View Switcher Tabs */}
-        <div className="flex p-1 rounded-xl bg-slate-900 border border-slate-800 self-start sm:self-auto">
+        <div className="flex p-1 rounded-xl bg-white border border-[#E5E7EB] shadow-sm self-start sm:self-auto">
           <button
             onClick={() => setViewTab('directory')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               viewTab === 'directory'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#14532D] text-white shadow-sm'
+                : 'text-[#64748B] hover:text-[#1F2937]'
             }`}
           >
             Stakeholder Directory
@@ -183,8 +178,8 @@ export const Organizations: React.FC = () => {
             onClick={() => setViewTab('rbac')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               viewTab === 'rbac'
-                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#14532D] text-white shadow-sm'
+                : 'text-[#64748B] hover:text-[#1F2937]'
             }`}
           >
             RBAC Permission Matrix
@@ -196,7 +191,7 @@ export const Organizations: React.FC = () => {
       {viewTab === 'directory' && (
         <div className="space-y-6">
           {/* Filter Bar and Search */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 glass-panel p-3 rounded-xl border border-slate-800">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-xl border border-[#E5E7EB] shadow-sm">
             <div className="flex items-center space-x-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
               {[
                 { id: 'ALL', label: 'All Enterprises' },
@@ -213,8 +208,8 @@ export const Organizations: React.FC = () => {
                   onClick={() => setFilterType(item.id)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                     filterType === item.id
-                      ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'bg-[#14532D] text-white shadow-sm'
+                      : 'text-[#64748B] hover:text-[#1F2937] hover:bg-[#F8FAF7]'
                   }`}
                 >
                   {item.label}
@@ -223,13 +218,13 @@ export const Organizations: React.FC = () => {
             </div>
 
             <div className="relative w-full sm:w-64">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#64748B]" />
               <input
                 type="text"
                 placeholder="Search enterprise, facility..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                className="w-full bg-[#F8FAF7] border border-[#E5E7EB] rounded-lg pl-8 pr-3 py-1.5 text-xs text-[#1F2937] placeholder-[#94A3B8] focus:outline-none focus:border-[#14532D]"
               />
             </div>
           </div>
@@ -243,50 +238,50 @@ export const Organizations: React.FC = () => {
               return (
                 <div
                   key={org.id}
-                  className="glass-panel p-5 rounded-2xl border border-slate-800 hover:border-slate-700/80 transition-all flex flex-col justify-between space-y-4"
+                  className="bg-white p-5 rounded-2xl border border-[#E5E7EB] hover:border-[#14532D] shadow-sm transition-all flex flex-col justify-between space-y-4"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between">
-                      <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-emerald-400">
+                      <div className="p-2.5 rounded-xl bg-[#ECFDF3] border border-[#D1FAE5] text-[#059669]">
                         <Building2 className="w-5 h-5" />
                       </div>
-                      <span className="text-[11px] font-mono font-semibold text-slate-400">
+                      <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#F8FAF7] border border-[#E5E7EB] text-[#64748B]">
                         {rawType.replace(/_/g, ' ')}
                       </span>
                     </div>
 
                     <div>
-                      <h3 className="text-base font-bold text-white tracking-tight">{org.name}</h3>
-                      <div className="flex items-center space-x-1.5 text-xs text-slate-400 mt-1">
-                        <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                      <h3 className="text-base font-bold text-[#1F2937] tracking-tight">{org.name}</h3>
+                      <div className="flex items-center space-x-1.5 text-xs text-[#64748B] mt-1">
+                        <MapPin className="w-3.5 h-3.5 text-[#64748B]" />
                         <span>{org.country}</span>
-                        <span className="text-slate-600">·</span>
-                        <span className="font-mono text-[11px] text-cyan-400">{facility}</span>
+                        <span className="text-[#CBD5E1]">·</span>
+                        <span className="font-mono text-[11px] text-[#14532D] font-semibold">{facility}</span>
                       </div>
                     </div>
 
-                    <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs space-y-1.5">
-                      <div className="flex items-center justify-between text-slate-400">
+                    <div className="p-3 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB] text-xs space-y-1.5">
+                      <div className="flex items-center justify-between text-[#64748B]">
                         <span>EU Metrology Verification:</span>
-                        <span className="flex items-center space-x-1 text-emerald-400 font-semibold text-[11px]">
+                        <span className="flex items-center space-x-1 text-[#059669] font-bold text-[11px]">
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Accredited</span>
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-slate-400">
+                      <div className="flex items-center justify-between text-[#64748B]">
                         <span>Audit Frequency:</span>
-                        <span className="text-slate-200 font-mono text-[11px]">Biannual</span>
+                        <span className="text-[#1F2937] font-mono text-[11px] font-semibold">Biannual</span>
                       </div>
-                      <div className="flex items-center justify-between text-slate-400">
+                      <div className="flex items-center justify-between text-[#64748B]">
                         <span>API Integration:</span>
-                        <span className="text-cyan-400 font-mono text-[11px]">FastAPI v1 / Supabase RLS</span>
+                        <span className="text-[#14532D] font-mono text-[11px] font-bold">FastAPI v1 / Supabase RLS</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+                  <div className="pt-2 border-t border-[#E5E7EB] flex items-center justify-between text-[11px] text-[#64748B]">
                     <span className="font-mono">UUID: {org.id.slice(0, 13)}...</span>
-                    <span className="text-emerald-400 font-medium">Compliance Active</span>
+                    <span className="text-[#059669] font-semibold">Compliance Active</span>
                   </div>
                 </div>
               );
@@ -298,36 +293,36 @@ export const Organizations: React.FC = () => {
       {/* VIEW 2: Interactive RBAC Matrix */}
       {viewTab === 'rbac' && (
         <div className="space-y-6">
-          <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+          <div className="bg-white p-6 rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+              <div className="p-2 rounded-xl bg-[#ECFDF3] border border-[#D1FAE5] text-[#059669]">
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">Cross-Enterprise RBAC Governance Model</h3>
-                <p className="text-xs text-slate-400">
+                <h3 className="text-sm font-bold text-[#14532D]">Cross-Enterprise RBAC Governance Model</h3>
+                <p className="text-xs text-[#64748B]">
                   Strict cryptographic permission boundaries enforced by Row-Level Security (RLS) and cryptographic signatures.
                 </p>
               </div>
             </div>
 
             {/* Matrix Table */}
-            <div className="overflow-x-auto border border-slate-800 rounded-xl">
+            <div className="overflow-x-auto border border-[#E5E7EB] rounded-xl shadow-sm">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-slate-900/90 text-slate-400 border-b border-slate-800">
-                    <th className="py-3 px-4 font-semibold">Capability / Operation</th>
+                  <tr className="bg-[#F8FAF7] text-[#64748B] border-b border-[#E5E7EB]">
+                    <th className="py-3 px-4 font-bold uppercase tracking-wider">Capability / Operation</th>
                     {rbacRoles.map(r => (
                       <th key={r.role} className="py-3 px-3 font-semibold text-center whitespace-nowrap">
-                        <div className="text-slate-200">{r.role.replace(/_/g, ' ')}</div>
+                        <div className="text-[#1F2937] font-bold">{r.role.replace(/_/g, ' ')}</div>
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 font-mono">
+                <tbody className="divide-y divide-[#E5E7EB] font-mono">
                   {permissionKeys.map(perm => (
-                    <tr key={perm} className="hover:bg-slate-900/40 transition-colors">
-                      <td className="py-2.5 px-4 font-sans text-slate-300 font-medium">
+                    <tr key={perm} className="hover:bg-[#F8FAF7] transition-colors">
+                      <td className="py-2.5 px-4 font-sans text-[#1F2937] font-medium">
                         {perm}
                       </td>
                       {rbacRoles.map(r => {
@@ -335,11 +330,11 @@ export const Organizations: React.FC = () => {
                         return (
                           <td key={r.role} className="py-2.5 px-3 text-center">
                             {allowed ? (
-                              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#ECFDF3] text-[#059669] border border-[#D1FAE5]">
                                 <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                               </span>
                             ) : (
-                              <span className="inline-flex items-center justify-center w-5 h-5 text-slate-600">
+                              <span className="inline-flex items-center justify-center w-5 h-5 text-[#CBD5E1]">
                                 <CloseIcon className="w-3.5 h-3.5" />
                               </span>
                             )}
@@ -352,9 +347,9 @@ export const Organizations: React.FC = () => {
               </table>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+            <div className="p-3 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB] text-[11px] text-[#64748B] flex items-center justify-between">
               <span>Cryptographic Enforcement: Each lifecycle block is digitally signed with the custodian's private key and verified via SHA-256 hash chaining.</span>
-              <span className="font-mono text-cyan-400">EU 2023/1542 Art. 77</span>
+              <span className="font-mono text-[#14532D] font-bold">EU 2023/1542 Art. 77</span>
             </div>
           </div>
         </div>

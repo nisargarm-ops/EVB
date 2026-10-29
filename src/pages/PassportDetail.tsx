@@ -5,13 +5,10 @@ import {
   Zap, 
   Leaf, 
   Activity, 
-  AlertCircle,
-  Truck,
-  Recycle,
-  CheckCircle2,
-  ShieldCheck,
-  Building2,
-  Sparkles
+  AlertCircle, 
+  Truck, 
+  CheckCircle2, 
+  Sparkles 
 } from 'lucide-react';
 import { BatteryPassport, CustodyEvent, UserRole, DispositionDecision, Organization } from '../types';
 import { api } from '../services/api';
@@ -138,8 +135,8 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
   if (loading) {
     return (
       <div className="text-center py-24">
-        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-xs text-slate-400">Loading passport metrology records...</p>
+        <div className="w-8 h-8 border-2 border-[#14532D] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-xs text-[#64748B]">Loading passport metrology records...</p>
       </div>
     );
   }
@@ -147,12 +144,12 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
   if (error || !passport) {
     return (
       <div className="max-w-xl mx-auto py-16 text-center space-y-4">
-        <AlertCircle className="w-12 h-12 text-rose-400 mx-auto" />
-        <h2 className="text-lg font-bold text-white">Passport Not Found</h2>
-        <p className="text-xs text-slate-400">{error || 'Requested battery record does not exist.'}</p>
+        <AlertCircle className="w-12 h-12 text-[#DC2626] mx-auto" />
+        <h2 className="text-lg font-bold text-[#1F2937]">Passport Not Found</h2>
+        <p className="text-xs text-[#64748B]">{error || 'Requested battery record does not exist.'}</p>
         <button
           onClick={onBack}
-          className="px-4 py-2 rounded-xl bg-slate-800 text-slate-200 text-xs font-semibold"
+          className="px-4 py-2 rounded-xl bg-[#14532D] text-white text-xs font-semibold"
         >
           Return to Dashboard
         </button>
@@ -165,11 +162,11 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
       {actionNotice && (
         <div className={`p-4 rounded-xl border flex items-center justify-between text-xs font-semibold ${
           actionNotice.type === 'success'
-            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-            : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+            ? 'bg-[#ECFDF3] border-[#D1FAE5] text-[#059669]'
+            : 'bg-[#FEE2E2] border-[#FECACA] text-[#DC2626]'
         }`}>
           <span>{actionNotice.message}</span>
-          <button onClick={() => setActionNotice(null)} className="text-slate-400 hover:text-white ml-4">✕</button>
+          <button onClick={() => setActionNotice(null)} className="text-[#64748B] hover:text-[#1F2937] ml-4">✕</button>
         </div>
       )}
 
@@ -178,18 +175,18 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
         <div className="flex items-center space-x-3">
           <button
             onClick={onBack}
-            className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors"
+            className="p-2 rounded-xl bg-white hover:bg-[#F8FAF7] text-[#1F2937] border border-[#E5E7EB] transition-colors shadow-sm"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="text-2xl font-extrabold text-white tracking-tight">{passport.battery_id}</h1>
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+              <h1 className="text-2xl font-extrabold text-[#14532D] tracking-tight">{passport.battery_id}</h1>
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[#ECFDF3] text-[#059669] border border-[#D1FAE5]">
                 {passport.status.replace(/_/g, ' ')}
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-mono mt-0.5">{passport.battery_did}</p>
+            <p className="text-xs text-[#64748B] font-mono mt-0.5">{passport.battery_did}</p>
           </div>
         </div>
 
@@ -197,9 +194,9 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
           {['FLEET_OPERATOR', 'OEM', 'MANUFACTURER', 'SERVICE_CENTER'].includes(activeRole) && (
             <button
               onClick={() => setShowTransferModal(true)}
-              className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all"
+              className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-white hover:bg-[#F8FAF7] text-[#14532D] text-xs font-semibold border border-[#E5E7EB] hover:border-[#14532D] transition-all shadow-sm"
             >
-              <Truck className="w-4 h-4 text-emerald-400" />
+              <Truck className="w-4 h-4 text-[#059669]" />
               <span>Transfer Custody</span>
             </button>
           )}
@@ -207,16 +204,16 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
           {['FLEET_OPERATOR', 'OEM', 'MANUFACTURER'].includes(activeRole) && (
             <button
               onClick={() => setShowTelemetryForm(!showTelemetryForm)}
-              className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all"
+              className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-white hover:bg-[#F8FAF7] text-[#14532D] text-xs font-semibold border border-[#E5E7EB] hover:border-[#14532D] transition-all shadow-sm"
             >
-              <Activity className="w-4 h-4 text-cyan-400" />
+              <Activity className="w-4 h-4 text-[#059669]" />
               <span>Log BMS Telemetry</span>
             </button>
           )}
 
           <button
             onClick={() => onShowQr(passport.battery_id)}
-            className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-lg shadow-emerald-500/20"
+            className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-[#14532D] hover:bg-[#166534] text-white text-xs font-bold transition-all shadow-sm"
           >
             <QrCode className="w-4 h-4" />
             <span>Digital QR Sticker</span>
@@ -226,18 +223,18 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
 
       {/* Telemetry Update Modal Form */}
       {showTelemetryForm && (
-        <form onSubmit={handleUpdateTelemetry} className="glass-panel p-6 rounded-2xl border border-cyan-500/30 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <form onSubmit={handleUpdateTelemetry} className="bg-white p-6 rounded-2xl border border-[#D1FAE5] shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
             <div className="flex items-center space-x-2">
-              <Activity className="w-4 h-4 text-cyan-400" />
-              <h3 className="text-sm font-bold text-white">Record Live Battery Telemetry (BMS)</h3>
+              <Activity className="w-4 h-4 text-[#059669]" />
+              <h3 className="text-sm font-bold text-[#14532D]">Record Live Battery Telemetry (BMS)</h3>
             </div>
-            <span className="text-xs text-slate-400">Enforces Tamper-Evident Hash Chain</span>
+            <span className="text-xs text-[#64748B]">Enforces Tamper-Evident Hash Chain</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1">State of Health (%)</label>
+              <label className="text-[11px] font-semibold text-[#1F2937] block mb-1">State of Health (%)</label>
               <input 
                 type="number" 
                 step="0.1" 
@@ -245,12 +242,12 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
                 max="100" 
                 value={newSoH} 
                 onChange={e => setNewSoH(parseFloat(e.target.value))}
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white"
+                className="w-full bg-white border border-[#E5E7EB] rounded-lg p-2 text-xs text-[#1F2937] focus:outline-none focus:border-[#14532D]"
                 required
               />
             </div>
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1">State of Charge (%)</label>
+              <label className="text-[11px] font-semibold text-[#1F2937] block mb-1">State of Charge (%)</label>
               <input 
                 type="number" 
                 step="0.1" 
@@ -258,43 +255,43 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
                 max="100" 
                 value={newSoC} 
                 onChange={e => setNewSoC(parseFloat(e.target.value))}
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white"
+                className="w-full bg-white border border-[#E5E7EB] rounded-lg p-2 text-xs text-[#1F2937] focus:outline-none focus:border-[#14532D]"
                 required
               />
             </div>
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1">Cycle Count</label>
+              <label className="text-[11px] font-semibold text-[#1F2937] block mb-1">Cycle Count</label>
               <input 
                 type="number" 
                 min="0" 
                 value={newCycles} 
                 onChange={e => setNewCycles(parseInt(e.target.value))}
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white"
+                className="w-full bg-white border border-[#E5E7EB] rounded-lg p-2 text-xs text-[#1F2937] focus:outline-none focus:border-[#14532D]"
                 required
               />
             </div>
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1">Internal Resistance (mΩ)</label>
+              <label className="text-[11px] font-semibold text-[#1F2937] block mb-1">Internal Resistance (mΩ)</label>
               <input 
                 type="number" 
                 step="0.1" 
                 min="1" 
                 value={newResistance} 
                 onChange={e => setNewResistance(parseFloat(e.target.value))}
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white"
+                className="w-full bg-white border border-[#E5E7EB] rounded-lg p-2 text-xs text-[#1F2937] focus:outline-none focus:border-[#14532D]"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="text-[11px] text-slate-400 block mb-1">Telemetry Notes / Diagnostics</label>
+            <label className="text-[11px] font-semibold text-[#1F2937] block mb-1">Telemetry Notes / Diagnostics</label>
             <input 
               type="text" 
               placeholder="e.g. Scheduled quarterly fleet diagnostic scan"
               value={telemetryNote} 
               onChange={e => setTelemetryNote(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white"
+              className="w-full bg-white border border-[#E5E7EB] rounded-lg p-2 text-xs text-[#1F2937] focus:outline-none focus:border-[#14532D]"
             />
           </div>
 
@@ -302,14 +299,14 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
             <button
               type="button"
               onClick={() => setShowTelemetryForm(false)}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold"
+              className="px-3 py-1.5 rounded-lg bg-[#F8FAF7] border border-[#E5E7EB] text-[#1F2937] text-xs font-semibold"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={updating}
-              className="px-4 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold"
+              className="px-4 py-1.5 rounded-lg bg-[#14532D] hover:bg-[#166534] text-white text-xs font-bold shadow-sm"
             >
               {updating ? 'Appending Block...' : 'Append Hash Chain Block'}
             </button>
@@ -320,133 +317,133 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
       {/* Main Grid: Health, Specs, Circularity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* State of Health & Telematics */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+        <div className="bg-white p-6 rounded-2xl border border-[#E5E7EB] space-y-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Health & Degradation</span>
-            <Activity className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-bold text-[#1F2937] uppercase tracking-wider">Health & Degradation</span>
+            <Activity className="w-4 h-4 text-[#059669]" />
           </div>
 
-          <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-center">
-            <div className="text-4xl font-extrabold text-emerald-400 font-mono">
+          <div className="p-4 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB] text-center">
+            <div className="text-4xl font-extrabold text-[#059669] font-mono">
               {passport.health_state.state_of_health_pct}%
             </div>
-            <div className="text-xs text-slate-400 mt-1">State of Health (SoH)</div>
-            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
+            <div className="text-xs text-[#64748B] mt-1 font-medium">State of Health (SoH)</div>
+            <div className="w-full bg-[#E5E7EB] h-2 rounded-full overflow-hidden mt-3">
               <div 
-                className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full"
+                className="bg-[#059669] h-full rounded-full"
                 style={{ width: `${passport.health_state.state_of_health_pct}%` }}
               />
             </div>
           </div>
 
           <div className="space-y-2.5 text-xs">
-            <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-              <span className="text-slate-400">Current Custodian:</span>
-              <span className="font-semibold text-slate-200">{passport.current_custodian}</span>
+            <div className="flex justify-between py-1.5 border-b border-[#E5E7EB]">
+              <span className="text-[#64748B]">Current Custodian:</span>
+              <span className="font-semibold text-[#1F2937]">{passport.current_custodian}</span>
             </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-              <span className="text-slate-400">State of Charge (SoC):</span>
-              <span className="font-mono font-bold text-slate-200">{passport.health_state.state_of_charge_pct}%</span>
+            <div className="flex justify-between py-1.5 border-b border-[#E5E7EB]">
+              <span className="text-[#64748B]">State of Charge (SoC):</span>
+              <span className="font-mono font-bold text-[#1F2937]">{passport.health_state.state_of_charge_pct}%</span>
             </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-              <span className="text-slate-400">Cycle Count:</span>
-              <span className="font-mono font-bold text-slate-200">{passport.health_state.cycle_count} cycles</span>
+            <div className="flex justify-between py-1.5 border-b border-[#E5E7EB]">
+              <span className="text-[#64748B]">Cycle Count:</span>
+              <span className="font-mono font-bold text-[#1F2937]">{passport.health_state.cycle_count} cycles</span>
             </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-              <span className="text-slate-400">Internal Resistance:</span>
-              <span className="font-mono font-bold text-slate-200">{passport.health_state.internal_resistance_mohm} mΩ</span>
+            <div className="flex justify-between py-1.5 border-b border-[#E5E7EB]">
+              <span className="text-[#64748B]">Internal Resistance:</span>
+              <span className="font-mono font-bold text-[#1F2937]">{passport.health_state.internal_resistance_mohm} mΩ</span>
             </div>
             <div className="flex justify-between py-1.5">
-              <span className="text-slate-400">Annual Fade Rate:</span>
-              <span className="font-mono font-bold text-slate-200">{passport.health_state.capacity_fade_rate_pct_yr}% / yr</span>
+              <span className="text-[#64748B]">Annual Fade Rate:</span>
+              <span className="font-mono font-bold text-[#1F2937]">{passport.health_state.capacity_fade_rate_pct_yr}% / yr</span>
             </div>
           </div>
         </div>
 
         {/* Technical Specifications */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+        <div className="bg-white p-6 rounded-2xl border border-[#E5E7EB] space-y-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Technical Specifications</span>
-            <Zap className="w-4 h-4 text-amber-400" />
+            <span className="text-xs font-bold text-[#1F2937] uppercase tracking-wider">Technical Specifications</span>
+            <Zap className="w-4 h-4 text-[#D97706]" />
           </div>
 
           <div className="space-y-2.5 text-xs">
-            <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-              <span className="text-slate-400">Chemistry:</span>
-              <span className="font-semibold text-emerald-400">{passport.chemistry}</span>
+            <div className="flex justify-between py-1.5 border-b border-[#E5E7EB]">
+              <span className="text-[#64748B]">Chemistry:</span>
+              <span className="font-semibold text-[#14532D]">{passport.chemistry}</span>
             </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-              <span className="text-slate-400">Rated Energy Capacity:</span>
-              <span className="font-mono font-bold text-slate-200">{passport.technical_specs.rated_capacity_kwh} kWh</span>
+            <div className="flex justify-between py-1.5 border-b border-[#E5E7EB]">
+              <span className="text-[#64748B]">Rated Energy Capacity:</span>
+              <span className="font-mono font-bold text-[#1F2937]">{passport.technical_specs.rated_capacity_kwh} kWh</span>
             </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-              <span className="text-slate-400">Nominal Voltage:</span>
-              <span className="font-mono font-bold text-slate-200">{passport.technical_specs.nominal_voltage_v} V</span>
+            <div className="flex justify-between py-1.5 border-b border-[#E5E7EB]">
+              <span className="text-[#64748B]">Nominal Voltage:</span>
+              <span className="font-mono font-bold text-[#1F2937]">{passport.technical_specs.nominal_voltage_v} V</span>
             </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-              <span className="text-slate-400">Peak Charging Power:</span>
-              <span className="font-mono font-bold text-slate-200">{passport.technical_specs.max_charge_power_kw} kW</span>
+            <div className="flex justify-between py-1.5 border-b border-[#E5E7EB]">
+              <span className="text-[#64748B]">Peak Charging Power:</span>
+              <span className="font-mono font-bold text-[#1F2937]">{passport.technical_specs.max_charge_power_kw} kW</span>
             </div>
-            <div className="flex justify-between py-1.5 border-b border-slate-800/80">
-              <span className="text-slate-400">Cell Count:</span>
-              <span className="font-mono font-bold text-slate-200">{passport.technical_specs.cell_count} cells</span>
+            <div className="flex justify-between py-1.5 border-b border-[#E5E7EB]">
+              <span className="text-[#64748B]">Cell Count:</span>
+              <span className="font-mono font-bold text-[#1F2937]">{passport.technical_specs.cell_count} cells</span>
             </div>
             <div className="flex justify-between py-1.5">
-              <span className="text-slate-400">Pack Weight:</span>
-              <span className="font-mono font-bold text-slate-200">{passport.technical_specs.pack_weight_kg} kg</span>
+              <span className="text-[#64748B]">Pack Weight:</span>
+              <span className="font-mono font-bold text-[#1F2937]">{passport.technical_specs.pack_weight_kg} kg</span>
             </div>
           </div>
         </div>
 
         {/* Circularity & Carbon Footprint */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+        <div className="bg-white p-6 rounded-2xl border border-[#E5E7EB] space-y-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">EU Circular Metrology</span>
-            <Leaf className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-bold text-[#1F2937] uppercase tracking-wider">EU Circular Metrology</span>
+            <Leaf className="w-4 h-4 text-[#059669]" />
           </div>
 
-          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+          <div className="p-3.5 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB] flex items-center justify-between">
             <div>
-              <div className="text-[11px] text-slate-400">Carbon Footprint</div>
-              <div className="text-lg font-bold font-mono text-emerald-400">
-                {passport.carbon_footprint.total_co2_kg_per_kwh} <span className="text-xs">kg CO₂e/kWh</span>
+              <div className="text-[11px] text-[#64748B]">Carbon Footprint</div>
+              <div className="text-lg font-bold font-mono text-[#14532D]">
+                {passport.carbon_footprint.total_co2_kg_per_kwh} <span className="text-xs font-normal">kg CO₂e/kWh</span>
               </div>
             </div>
-            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
+            <span className="px-2.5 py-1 rounded-lg bg-[#ECFDF3] text-[#059669] text-xs font-bold border border-[#D1FAE5]">
               {passport.carbon_footprint.eu_compliance_class}
             </span>
           </div>
 
           <div className="space-y-2 text-xs">
-            <div className="text-[11px] font-bold text-slate-400 mb-2">Recycled Material Content (Target 2030)</div>
+            <div className="text-[11px] font-bold text-[#1F2937] mb-2">Recycled Material Content (Target 2030)</div>
             
             <div>
               <div className="flex justify-between text-[11px] mb-1">
-                <span className="text-slate-400">Active Cobalt:</span>
-                <span className="font-mono font-bold text-slate-200">{passport.recycled_content.cobalt_percentage}%</span>
+                <span className="text-[#64748B]">Active Cobalt:</span>
+                <span className="font-mono font-bold text-[#1F2937]">{passport.recycled_content.cobalt_percentage}%</span>
               </div>
-              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-cyan-500 h-full rounded-full" style={{ width: `${passport.recycled_content.cobalt_percentage}%` }} />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between text-[11px] mb-1">
-                <span className="text-slate-400">Active Lithium:</span>
-                <span className="font-mono font-bold text-slate-200">{passport.recycled_content.lithium_percentage}%</span>
-              </div>
-              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${passport.recycled_content.lithium_percentage}%` }} />
+              <div className="w-full bg-[#E5E7EB] h-1.5 rounded-full overflow-hidden">
+                <div className="bg-[#0D9488] h-full rounded-full" style={{ width: `${passport.recycled_content.cobalt_percentage}%` }} />
               </div>
             </div>
 
             <div>
               <div className="flex justify-between text-[11px] mb-1">
-                <span className="text-slate-400">Active Nickel:</span>
-                <span className="font-mono font-bold text-slate-200">{passport.recycled_content.nickel_percentage}%</span>
+                <span className="text-[#64748B]">Active Lithium:</span>
+                <span className="font-mono font-bold text-[#1F2937]">{passport.recycled_content.lithium_percentage}%</span>
               </div>
-              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-purple-500 h-full rounded-full" style={{ width: `${passport.recycled_content.nickel_percentage}%` }} />
+              <div className="w-full bg-[#E5E7EB] h-1.5 rounded-full overflow-hidden">
+                <div className="bg-[#059669] h-full rounded-full" style={{ width: `${passport.recycled_content.lithium_percentage}%` }} />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-[11px] mb-1">
+                <span className="text-[#64748B]">Active Nickel:</span>
+                <span className="font-mono font-bold text-[#1F2937]">{passport.recycled_content.nickel_percentage}%</span>
+              </div>
+              <div className="w-full bg-[#E5E7EB] h-1.5 rounded-full overflow-hidden">
+                <div className="bg-[#14532D] h-full rounded-full" style={{ width: `${passport.recycled_content.nickel_percentage}%` }} />
               </div>
             </div>
           </div>
@@ -455,71 +452,71 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
 
       {/* EU 2023/1542 Disposition & Second-Life Decision Engine */}
       {disposition && (
-        <div className="glass-panel p-6 rounded-2xl border border-cyan-500/30 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+        <div className="bg-white p-6 rounded-2xl border border-[#D1FAE5] shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E5E7EB] pb-3">
             <div className="flex items-center space-x-2.5">
-              <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+              <div className="p-2 rounded-xl bg-[#ECFDF3] text-[#059669] border border-[#D1FAE5]">
                 <Sparkles className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">EU 2023/1542 Circular Disposition Decision</h3>
-                <p className="text-xs text-slate-400">Algorithmic End-of-First-Life & Second-Life Routing</p>
+                <h3 className="text-sm font-bold text-[#14532D]">EU 2023/1542 Circular Disposition Decision</h3>
+                <p className="text-xs text-[#64748B]">Algorithmic End-of-First-Life & Second-Life Routing</p>
               </div>
             </div>
 
             <div className="flex items-center space-x-2">
-              <span className="text-xs text-slate-400">Regulatory Score:</span>
-              <span className="text-sm font-bold font-mono text-cyan-400 px-2.5 py-0.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
+              <span className="text-xs text-[#64748B]">Regulatory Score:</span>
+              <span className="text-sm font-bold font-mono text-[#059669] px-2.5 py-0.5 rounded-lg bg-[#ECFDF3] border border-[#D1FAE5]">
                 {disposition.score}/100
               </span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-              <div className="text-[11px] text-slate-500 uppercase tracking-wider">Primary Recommendation</div>
-              <div className="text-base font-bold text-emerald-400">
+            <div className="p-4 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB] space-y-2">
+              <div className="text-[11px] text-[#64748B] font-bold uppercase tracking-wider">Primary Recommendation</div>
+              <div className="text-base font-bold text-[#059669]">
                 {(disposition.recommended_action || disposition.recommendation).replace(/_/g, ' ')}
               </div>
-              <div className="text-xs text-slate-400 flex items-center space-x-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>Second-Life Suitable: <strong className="text-white">{disposition.is_second_life_suitable ? 'Yes' : 'No'}</strong></span>
+              <div className="text-xs text-[#475569] flex items-center space-x-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#059669] shrink-0" />
+                <span>Second-Life Suitable: <strong className="text-[#1F2937]">{disposition.is_second_life_suitable ? 'Yes' : 'No'}</strong></span>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-              <div className="text-[11px] text-slate-500 uppercase tracking-wider">Target Application</div>
-              <div className="text-sm font-bold text-white">
+            <div className="p-4 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB] space-y-2">
+              <div className="text-[11px] text-[#64748B] font-bold uppercase tracking-wider">Target Application</div>
+              <div className="text-sm font-bold text-[#1F2937]">
                 {disposition.target_application || 'Stationary Grid Storage (BESS)'}
               </div>
-              <div className="text-xs text-slate-400">
-                Est. Lifespan Remaining: <strong className="text-slate-200">{disposition.estimated_remaining_useful_life_years} years</strong>
+              <div className="text-xs text-[#475569]">
+                Est. Lifespan Remaining: <strong className="text-[#1F2937]">{disposition.estimated_remaining_useful_life_years} years</strong>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-              <div className="text-[11px] text-slate-500 uppercase tracking-wider">Recycling Recovery Target</div>
-              <div className="text-sm font-bold text-cyan-400">
+            <div className="p-4 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB] space-y-2">
+              <div className="text-[11px] text-[#64748B] font-bold uppercase tracking-wider">Recycling Recovery Target</div>
+              <div className="text-sm font-bold text-[#0D9488]">
                 {disposition.recycling_efficiency_pct}% Recovery
               </div>
-              <div className="text-xs text-slate-400">
-                Approval Status: <span className="font-semibold text-emerald-400">{disposition.approval_status}</span>
+              <div className="text-xs text-[#475569]">
+                Approval Status: <span className="font-semibold text-[#059669]">{disposition.approval_status}</span>
               </div>
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 text-xs space-y-2">
-            <div className="font-semibold text-slate-300">Statutory Justification & Regulatory References:</div>
-            <p className="text-slate-300 leading-relaxed">{disposition.explanation}</p>
+          <div className="p-4 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB] text-xs space-y-2">
+            <div className="font-bold text-[#1F2937]">Statutory Justification & Regulatory References:</div>
+            <p className="text-[#475569] leading-relaxed">{disposition.explanation}</p>
             {disposition.constraints_evaluated && (
-              <div className="pt-2 border-t border-slate-800/80 flex flex-wrap gap-2 text-[11px]">
-                <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400">
+              <div className="pt-2 border-t border-[#E5E7EB] flex flex-wrap gap-2 text-[11px]">
+                <span className="px-2 py-0.5 rounded-md bg-white border border-[#E5E7EB] text-[#64748B]">
                   Min SoH Threshold: 70% (Actual: {passport.health_state.state_of_health_pct}%)
                 </span>
-                <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400">
+                <span className="px-2 py-0.5 rounded-md bg-white border border-[#E5E7EB] text-[#64748B]">
                   Thermal Runaway Events: 0
                 </span>
-                <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400">
+                <span className="px-2 py-0.5 rounded-md bg-white border border-[#E5E7EB] text-[#64748B]">
                   EU Art. 14 Conformity: Validated
                 </span>
               </div>
@@ -536,36 +533,36 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
 
       {/* Transfer Custody Modal */}
       {showTransferModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
           <form
             onSubmit={handleInitiateTransfer}
-            className="w-full max-w-lg glass-panel bg-slate-900/95 border border-slate-700 rounded-2xl p-6 shadow-2xl space-y-4"
+            className="w-full max-w-lg bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-xl space-y-4"
           >
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
               <div className="flex items-center space-x-2.5">
-                <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                <div className="p-2 rounded-xl bg-[#ECFDF3] border border-[#D1FAE5] text-[#059669]">
                   <Truck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Transfer Battery Custody</h3>
-                  <p className="text-xs text-slate-400 font-mono">{passport.battery_id}</p>
+                  <h3 className="text-sm font-bold text-[#14532D]">Transfer Battery Custody</h3>
+                  <p className="text-xs text-[#64748B] font-mono">{passport.battery_id}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowTransferModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-[#64748B] hover:text-[#1F2937]"
               >
                 ✕
               </button>
             </div>
 
             <div>
-              <label className="text-xs font-medium text-slate-300 block mb-1">Target Transferee Organization</label>
+              <label className="text-xs font-semibold text-[#1F2937] block mb-1">Target Transferee Organization</label>
               <select
                 value={transferTargetOrg}
                 onChange={(e) => setTransferTargetOrg(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#1F2937] focus:outline-none focus:border-[#14532D]"
                 required
               >
                 {organizations.map((org) => (
@@ -577,11 +574,11 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
             </div>
 
             <div>
-              <label className="text-xs font-medium text-slate-300 block mb-1">Transfer Purpose</label>
+              <label className="text-xs font-semibold text-[#1F2937] block mb-1">Transfer Purpose</label>
               <select
                 value={transferType}
                 onChange={(e) => setTransferType(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#1F2937] focus:outline-none focus:border-[#14532D]"
               >
                 <option value="OEM_DELIVERY">OEM Automotive Delivery</option>
                 <option value="FLEET_DELIVERY">Commercial Fleet Onboarding</option>
@@ -592,13 +589,13 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
             </div>
 
             <div>
-              <label className="text-xs font-medium text-slate-300 block mb-1">Transfer Notes / Transport Seal</label>
+              <label className="text-xs font-semibold text-[#1F2937] block mb-1">Transfer Notes / Transport Seal</label>
               <textarea
                 rows={3}
                 placeholder="e.g. Dispatched via certified ADR carrier. Transport seal #TS-8842."
                 value={transferNotes}
                 onChange={(e) => setTransferNotes(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-white border border-[#E5E7EB] rounded-xl p-3 text-xs text-[#1F2937] placeholder-[#94A3B8] focus:outline-none focus:border-[#14532D]"
               />
             </div>
 
@@ -606,14 +603,14 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
               <button
                 type="button"
                 onClick={() => setShowTransferModal(false)}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold"
+                className="px-3 py-1.5 rounded-lg bg-[#F8FAF7] border border-[#E5E7EB] text-[#1F2937] text-xs font-semibold"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={transferSubmitting}
-                className="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-md shadow-emerald-500/20"
+                className="px-4 py-1.5 rounded-lg bg-[#14532D] hover:bg-[#166534] text-white text-xs font-bold shadow-sm"
               >
                 {transferSubmitting ? 'Dispatching...' : 'Dispatch Custody Transfer'}
               </button>

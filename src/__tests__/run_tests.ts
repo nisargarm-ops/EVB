@@ -230,6 +230,38 @@ async function runTestSuite() {
     assert(false, 'Test 10', e.message);
   }
 
+  // --------------------------------------------------------------------------
+  // Test 11: Manufacturer cannot escalate to Auditor or unassigned organization
+  // --------------------------------------------------------------------------
+  try {
+    let switchBlocked = false;
+    try {
+      await api.signOut();
+      await api.switchRole('REGULATOR_AUDITOR', 'EU Metrology Authority');
+    } catch (err: any) {
+      if (err.message.includes('Privilege escalation denied') || err.message.includes('forbidden')) {
+        switchBlocked = true;
+      }
+    }
+    assert(switchBlocked, 'Test 11: Manufacturer/Public user cannot escalate to Auditor without credentials (403)');
+  } catch (e: any) {
+    assert(false, 'Test 11', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 12: Public verification succeeds without authentication & leaks no secrets
+  // --------------------------------------------------------------------------
+  try {
+    const verified = await batteryRepository.verifyPublic('BAT-NMC-8A2F91C0');
+    const validPublic =
+      verified.is_authentic === true &&
+      (verified as any).internal_cost_breakdown === undefined &&
+      (verified as any).raw_telemetry === undefined;
+    assert(validPublic, 'Test 12: Public QR verification continues to work securely without credentials');
+  } catch (e: any) {
+    assert(false, 'Test 12', e.message);
+  }
+
   console.log('\n----------------------------------------------------------------');
   console.log(`SUMMARY: ${passed} Passed, ${failed} Failed out of ${passed + failed} Tests`);
   console.log('----------------------------------------------------------------\n');

@@ -9,6 +9,13 @@ export type UserRole =
   | 'ADMINISTRATOR'
   | 'PUBLIC';
 
+export interface UserOrganizationMembership {
+  organization_id: string;
+  organization_name: string;
+  role: UserRole;
+  is_verified?: boolean;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -16,6 +23,7 @@ export interface UserProfile {
   role: UserRole;
   organization_id: string;
   organization_name: string;
+  authorized_memberships?: UserOrganizationMembership[];
 }
 
 export type OrganizationType = 

@@ -198,6 +198,10 @@ async function backendFetch<T>(
 }
 
 export const api = {
+  isAuthenticated(): boolean {
+    return Boolean(isValidJwtFormat(authToken));
+  },
+
   // --------------------------------------------------------------------------
   // Database Status & Diagnostics
   // --------------------------------------------------------------------------
@@ -361,8 +365,33 @@ export const api = {
       }
     }
 
+    // Seamless fallback for local/offline testing if Supabase is not yet configured
+    if (isBrowserRuntime) {
+      try {
+        const switched = await this.switchRole(role, resolvedOrg || 'Enterprise Hub');
+        const fallbackProfile: UserProfile = {
+          id: `usr-${Date.now().toString(36)}`,
+          email,
+          full_name: fullName,
+          role,
+          organization_id: `org-${Date.now().toString(36)}`,
+          organization_name: resolvedOrg || switched.organization,
+        };
+        activeUser = fallbackProfile;
+        safeStorage.setItem('bp360_active_role', role);
+        safeStorage.setItem('bp360_active_org', fallbackProfile.organization_name);
+        return {
+          user: { id: fallbackProfile.id, email },
+          session: { access_token: getAuthToken() },
+          profile: fallbackProfile,
+        };
+      } catch {
+        // Continue to throw configuration message
+      }
+    }
+
     throw new Error(
-      'Supabase Auth is not configured in this environment. Please configure SUPABASE_URL and SUPABASE_ANON_KEY (or SUPABASE_SERVICE_ROLE_KEY) in Google AI Studio environment settings.'
+      'Supabase Auth is not configured in this environment. Please configure SUPABASE_URL and SUPABASE_ANON_KEY (or SUPABASE_SERVICE_ROLE_KEY).'
     );
   },
 
@@ -454,8 +483,34 @@ export const api = {
       }
     }
 
+    // Seamless fallback for local/offline testing if Supabase is not yet configured
+    if (isBrowserRuntime) {
+      try {
+        const switched = await this.switchRole(
+          currentRole !== 'PUBLIC' ? currentRole : 'MANUFACTURER',
+          currentOrg !== 'Anonymous Citizen' ? currentOrg : 'QuantumVolt Gigafactory'
+        );
+        const fallbackProfile: UserProfile = {
+          id: `usr-${Date.now().toString(36)}`,
+          email,
+          full_name: email.split('@')[0],
+          role: switched.role,
+          organization_id: 'org-dev',
+          organization_name: switched.organization,
+        };
+        activeUser = fallbackProfile;
+        return {
+          user: { id: fallbackProfile.id, email },
+          session: { access_token: getAuthToken() },
+          profile: fallbackProfile,
+        };
+      } catch {
+        // Continue to throw configuration message
+      }
+    }
+
     throw new Error(
-      'Supabase Auth is not configured in this environment. Please configure SUPABASE_URL and SUPABASE_ANON_KEY in Google AI Studio environment settings.'
+      'Supabase Auth is not configured in this environment. Please configure SUPABASE_URL and SUPABASE_ANON_KEY in your .env configuration.'
     );
   },
 
@@ -487,17 +542,16 @@ export const api = {
   },
 
   async switchRole(role: UserRole, organization?: string) {
-    if (role === 'ADMINISTRATOR' && currentRole !== 'ADMINISTRATOR') {
+    if (
+      (role === 'ADMINISTRATOR' && currentRole !== 'ADMINISTRATOR') ||
+      (role === 'REGULATOR_AUDITOR' && currentRole !== 'REGULATOR_AUDITOR')
+    ) {
       throw new Error(
-        'Privilege escalation denied: You cannot switch to Administrator without existing administrator credentials.'
+        `Privilege escalation denied: You cannot switch to ${role} without existing verified credentials.`
       );
     }
 
     if (isBrowserRuntime) {
-      // Clear any active Supabase Auth session before switching demo persona
-      if (supabase && isSupabaseConfigured) {
-        await supabase.auth.signOut().catch(() => {});
-      }
       const data = await backendFetch<{
         access_token: string;
         token_type: string;
@@ -510,7 +564,7 @@ export const api = {
           method: 'POST',
           body: JSON.stringify({ role, organization }),
         },
-        false
+        true
       );
 
       currentRole = data.role;
@@ -518,14 +572,9 @@ export const api = {
       setAuthToken(data.access_token);
       safeStorage.setItem('bp360_active_role', currentRole);
       safeStorage.setItem('bp360_active_org', currentOrg);
-      activeUser = data.user || {
-        id: `usr-${role.toLowerCase()}`,
-        email: `${role.toLowerCase()}@batterypass360.eu`,
-        full_name: `${role.replace(/_/g, ' ')} Operator`,
-        role: currentRole,
-        organization_id: `org-${role.toLowerCase()}`,
-        organization_name: currentOrg,
-      };
+      if (data.user) {
+        activeUser = data.user;
+      }
       return data;
     }
 

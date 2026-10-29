@@ -7,6 +7,7 @@ import {
 // Load environment variables across standard files and AI Studio container files
 loadAppEnvironment();
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -106,50 +107,42 @@ async function startServer() {
     });
   });
 
-  // Authentication & Stakeholder Persona Endpoints
+  // Authenticated Enterprise Multi-Organization Switching (strictly enforces authorized memberships)
   apiRouter.post('/auth/switch-role', auth.optionalAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const envName = String(process.env.ENVIRONMENT || 'development').toLowerCase();
-      const allowSwitch =
-        String(process.env.ENABLE_DEV_ROLE_SWITCHING ?? 'true').toLowerCase() === 'true';
-
-      if (!allowSwitch || envName === 'production') {
+      if (!req.actor) {
         res.status(403).json({
-          detail:
-            'Role switching endpoint is disabled in production. Authenticate via Supabase Auth.',
+          detail: 'Privilege escalation denied: Authentication required. Authenticate via Supabase Auth to access enterprise roles.',
         });
         return;
       }
 
       const targetRole = normalizeUserRole(req.body?.role);
-      if (targetRole === 'ADMINISTRATOR' && req.actor?.role !== 'ADMINISTRATOR') {
+      const targetOrgName = req.body?.organization ? String(req.body.organization).trim().toLowerCase() : '';
+      const targetOrgId = req.body?.organization_id ? String(req.body.organization_id).trim() : '';
+
+      const matchedMembership = req.actor.authorized_memberships?.find((m) => {
+        if (targetOrgId && m.organization_id === targetOrgId) return true;
+        if (targetOrgName && m.organization_name.toLowerCase() === targetOrgName) return true;
+        if (targetRole && m.role === targetRole) return true;
+        return false;
+      });
+
+      if (!matchedMembership) {
         res.status(403).json({
-          detail:
-            'Privilege escalation denied: You cannot switch to Administrator without existing administrator credentials.',
+          detail: `Privilege escalation denied: You are not authorized for role '${targetRole}' or organization '${req.body?.organization || ''}'. Role switching requires explicit administrator assignment.`,
         });
         return;
       }
 
-      const defaults = ROLE_DEFAULT_ORGS[targetRole];
-      let orgId = defaults.id;
-      let orgName = String(req.body?.organization || defaults.name).trim();
-
-      if (supabaseBackendRepo.isConfigured() && targetRole !== 'PUBLIC') {
-        const resolvedOrg = await supabaseBackendRepo.resolveOrCreateOrganization(
-          orgName,
-          targetRole
-        );
-        orgId = resolvedOrg.id;
-        orgName = resolvedOrg.name;
-      }
-
       const actorPayload = {
-        id: ROLE_PROFILE_UUIDS[targetRole],
-        email: defaults.email,
-        full_name: defaults.fullName,
-        role: targetRole,
-        organization_id: orgId,
-        organization_name: orgName,
+        id: req.actor.id,
+        email: req.actor.email,
+        full_name: req.actor.full_name,
+        role: matchedMembership.role,
+        organization_id: matchedMembership.organization_id,
+        organization_name: matchedMembership.organization_name,
+        authorized_memberships: req.actor.authorized_memberships,
       };
 
       const token = issueServerJwt(
@@ -160,12 +153,12 @@ async function startServer() {
       res.json({
         access_token: token,
         token_type: 'bearer',
-        role: targetRole,
-        organization: orgName,
-        user: actorPayload,
+        role: matchedMembership.role,
+        organization: matchedMembership.organization_name,
+        user: actorToProfile(actorPayload as any),
       });
     } catch (err) {
-      sendError(res, err, 'Failed to switch role');
+      sendError(res, err, 'Failed to switch organization context');
     }
   });
 
@@ -651,18 +644,48 @@ async function startServer() {
   });
 
   // Frontend serving (Vite dev middleware in development, static dist in production)
+  const distPath = path.join(__dirname, 'dist');
+  const distIndex = path.join(distPath, 'index.html');
+
   if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
+    try {
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+
+      // Handle SPA index.html serving for non-API requests in dev mode
+      app.use('*', async (req: Request, res: Response, next: NextFunction) => {
+        const url = req.originalUrl;
+        if (url.startsWith('/api')) return next();
+        try {
+          const indexPath = path.resolve(__dirname, 'index.html');
+          if (fs.existsSync(indexPath)) {
+            let template = fs.readFileSync(indexPath, 'utf-8');
+            template = await vite.transformIndexHtml(url, template);
+            res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+            return;
+          }
+        } catch (e) {
+          return next(e);
+        }
+        next();
+      });
+    } catch (viteErr) {
+      console.warn('Vite dev middleware fallback:', viteErr);
+      if (fs.existsSync(distIndex)) {
+        app.use(express.static(distPath));
+        app.use((_req: Request, res: Response) => {
+          res.sendFile(distIndex);
+        });
+      }
+    }
   } else {
-    const distPath = path.join(__dirname, 'dist');
     app.use(express.static(distPath));
-    app.use((_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.use((_req: Request, res: Response) => {
+      res.sendFile(distIndex);
     });
   }
 

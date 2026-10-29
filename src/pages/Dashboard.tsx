@@ -4,19 +4,15 @@ import {
   Leaf, 
   Recycle, 
   Activity, 
-  ShieldCheck, 
   PlusCircle, 
   Cpu, 
-  AlertCircle,
-  Truck,
-  ArrowRight,
-  TrendingUp,
-  RefreshCw
+  AlertCircle
 } from 'lucide-react';
 import { PassportSummary, UserRole } from '../types';
 import { api } from '../services/api';
 import { PassportCard } from '../components/PassportCard';
 import { HealthRing } from '../components/HealthRing';
+import { useLanguage } from '../context/LanguageContext';
 
 interface DashboardProps {
   onSelectPassport: (id: string) => void;
@@ -33,6 +29,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigateQpiAI,
   activeRole
 }) => {
+  const { t } = useLanguage();
   const [passports, setPassports] = useState<PassportSummary[]>([]);
   const [filter, setFilter] = useState<string>('ALL');
   const [loading, setLoading] = useState(true);
@@ -65,57 +62,54 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const totalCapacityKwh = passports.reduce((acc, p) => acc + p.rated_capacity_kwh, 0);
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 py-6">
+    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 py-6 text-[#1F2937] dark:text-[#F1F5F9]">
       {/* Executive Command Banner */}
-      <div className="glass-panel-glow rounded-3xl p-6 sm:p-8 relative overflow-hidden">
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-emerald-500/10 via-cyan-500/5 to-transparent pointer-events-none" />
-        
+      <div className="bg-white dark:bg-[#121F17] border border-[#E5E7EB] dark:border-[#1E382B] rounded-3xl p-6 sm:p-8 relative shadow-sm transition-colors">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
           <div className="lg:col-span-8 space-y-3">
-            <div className="flex items-center space-x-2 text-xs text-slate-400">
-              <span className="font-semibold text-emerald-400">BatteryPass 360 Metrology Core</span>
+            <div className="flex items-center space-x-2 text-xs text-[#64748B] dark:text-[#94A3B8]">
+              <span className="font-semibold text-[#059669] dark:text-[#34D399]">BatteryPass 360 Metrology Core</span>
               <span aria-hidden="true">·</span>
               <span>EU Regulation 2023/1542</span>
               <span aria-hidden="true">·</span>
-              <span className="font-mono text-cyan-400">SHA-256 Ledger</span>
+              <span className="font-mono text-[#14532D] dark:text-[#34D399] font-bold">SHA-256 Ledger</span>
             </div>
 
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Enterprise Battery Intelligence & Lifecycle Operations
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#14532D] dark:text-[#34D399] tracking-tight">
+              {t.dashTitle}
             </h1>
 
-            <p className="text-slate-300 text-sm sm:text-base leading-relaxed max-w-2xl">
-              Real-time monitoring of State of Health, carbon intensity, and tamper-evident custody handoffs 
-              across cell manufacturers, OEMs, fleet operators, and circular recyclers.
+            <p className="text-[#475569] dark:text-[#CBD5E1] text-sm sm:text-base leading-relaxed max-w-2xl">
+              {t.dashSubtitle}
             </p>
 
             {/* Quick Actions */}
             <div className="pt-2 flex flex-wrap gap-3">
-              {activeRole === 'MANUFACTURER' && (
+              {(activeRole === 'MANUFACTURER' || activeRole === 'ADMINISTRATOR') && (
                 <button
                   onClick={onNavigateCreate}
-                  className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all transform hover:-translate-y-0.5"
+                  className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-[#14532D] hover:bg-[#166534] text-white font-bold text-xs shadow-sm transition-all"
                 >
                   <PlusCircle className="w-4 h-4" />
-                  <span>Mint Genesis Passport</span>
+                  <span>{t.navMintPassport}</span>
                 </button>
               )}
 
               <button
                 onClick={onNavigateQpiAI}
-                className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 font-semibold text-xs border border-slate-700 hover:border-cyan-500/40 transition-all"
+                className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] hover:bg-[#ECFDF3] dark:hover:bg-[#1F382B] text-[#14532D] dark:text-[#34D399] font-semibold text-xs border border-[#E5E7EB] dark:border-[#1E382B] hover:border-[#14532D] transition-all"
               >
-                <Cpu className="w-4 h-4 text-cyan-400" />
+                <Cpu className="w-4 h-4 text-[#059669]" />
                 <span>Launch QpiAI Optimization Studio</span>
               </button>
             </div>
           </div>
 
           {/* Average Fleet Health Ring Widget */}
-          <div className="lg:col-span-4 flex items-center justify-center p-4 rounded-2xl bg-slate-950/60 border border-slate-800/80">
+          <div className="lg:col-span-4 flex items-center justify-center p-5 rounded-2xl bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B]">
             <div className="text-center space-y-2">
               <HealthRing value={avgSoHNumber} size={120} strokeWidth={9} subLabel="Fleet Average" />
-              <div className="text-[11px] text-slate-400 font-mono">
+              <div className="text-[11px] text-[#64748B] dark:text-[#94A3B8] font-mono">
                 {totalBatteries} Registered Packs Monitored
               </div>
             </div>
@@ -125,79 +119,93 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       {/* KPI Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-1">
-          <div className="flex items-center justify-between text-slate-400 text-xs">
-            <span>Tracked Fleet</span>
-            <BatteryCharging className="w-4 h-4 text-emerald-400" />
+        <div className="bg-white dark:bg-[#121F17] p-5 rounded-2xl border border-[#E5E7EB] dark:border-[#1E382B] space-y-1 shadow-sm">
+          <div className="flex items-center justify-between text-[#64748B] dark:text-[#94A3B8] text-xs">
+            <span>{t.kpiTotalPassports}</span>
+            <BatteryCharging className="w-4 h-4 text-[#14532D] dark:text-[#34D399]" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-white font-mono">{totalBatteries}</div>
-          <p className="text-[11px] text-slate-500">Cross-enterprise registered</p>
+          <div className="text-2xl sm:text-3xl font-extrabold text-[#1F2937] dark:text-[#F1F5F9] font-mono">{totalBatteries}</div>
+          <p className="text-[11px] text-[#64748B] dark:text-[#94A3B8]">Cross-enterprise registered</p>
         </div>
 
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-1">
-          <div className="flex items-center justify-between text-slate-400 text-xs">
-            <span>Active Vehicle Fleet</span>
-            <Leaf className="w-4 h-4 text-emerald-400" />
+        <div className="bg-white dark:bg-[#121F17] p-5 rounded-2xl border border-[#E5E7EB] dark:border-[#1E382B] space-y-1 shadow-sm">
+          <div className="flex items-center justify-between text-[#64748B] dark:text-[#94A3B8] text-xs">
+            <span>{t.filterActive}</span>
+            <Leaf className="w-4 h-4 text-[#059669] dark:text-[#34D399]" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono">{inServiceCount}</div>
-          <p className="text-[11px] text-slate-500">Tier-1 OEM deployment</p>
+          <div className="text-2xl sm:text-3xl font-extrabold text-[#059669] dark:text-[#34D399] font-mono">{inServiceCount}</div>
+          <p className="text-[11px] text-[#64748B] dark:text-[#94A3B8]">Tier-1 OEM deployment</p>
         </div>
 
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-1">
-          <div className="flex items-center justify-between text-slate-400 text-xs">
-            <span>Second-Life Assigned</span>
-            <Recycle className="w-4 h-4 text-cyan-400" />
+        <div className="bg-white dark:bg-[#121F17] p-5 rounded-2xl border border-[#E5E7EB] dark:border-[#1E382B] space-y-1 shadow-sm">
+          <div className="flex items-center justify-between text-[#64748B] dark:text-[#94A3B8] text-xs">
+            <span>{t.filterSecondLife}</span>
+            <Recycle className="w-4 h-4 text-[#0D9488] dark:text-[#2DD4BF]" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-cyan-400 font-mono">{secondLifeCount}</div>
-          <p className="text-[11px] text-slate-500">Stationary BESS containers</p>
+          <div className="text-2xl sm:text-3xl font-extrabold text-[#0D9488] dark:text-[#2DD4BF] font-mono">{secondLifeCount}</div>
+          <p className="text-[11px] text-[#64748B] dark:text-[#94A3B8]">Stationary BESS containers</p>
         </div>
 
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-1">
-          <div className="flex items-center justify-between text-slate-400 text-xs">
+        <div className="bg-white dark:bg-[#121F17] p-5 rounded-2xl border border-[#E5E7EB] dark:border-[#1E382B] space-y-1 shadow-sm">
+          <div className="flex items-center justify-between text-[#64748B] dark:text-[#94A3B8] text-xs">
             <span>Total Fleet Energy</span>
-            <Activity className="w-4 h-4 text-amber-400" />
+            <Activity className="w-4 h-4 text-[#D97706] dark:text-[#FBBF24]" />
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-slate-200 font-mono">{totalCapacityKwh.toFixed(0)} <span className="text-sm font-sans font-normal text-slate-400">kWh</span></div>
-          <p className="text-[11px] text-slate-500">Cumulative rated energy</p>
+          <div className="text-2xl sm:text-3xl font-extrabold text-[#1F2937] dark:text-[#F1F5F9] font-mono">
+            {totalCapacityKwh.toFixed(0)} <span className="text-sm font-sans font-normal text-[#64748B] dark:text-[#94A3B8]">kWh</span>
+          </div>
+          <p className="text-[11px] text-[#64748B] dark:text-[#94A3B8]">Cumulative rated energy</p>
         </div>
       </div>
 
       {/* Segmented Filter Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
-        <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-2">
+        <div className="text-xs font-bold text-[#1F2937] dark:text-[#F1F5F9] uppercase tracking-wider flex items-center space-x-2">
           <span>Lifecycle Status Filter</span>
-          <span aria-hidden="true" className="text-slate-600">·</span>
-          <span className="text-slate-400 font-normal">{passports.length} Records</span>
+          <span aria-hidden="true" className="text-[#CBD5E1]">·</span>
+          <span className="text-[#64748B] dark:text-[#94A3B8] font-normal">{passports.length} Records</span>
         </div>
 
-        {/* Segmented button controls (Functional buttons, clean interactive styling) */}
-        <div className="flex flex-wrap gap-1 p-1 rounded-xl bg-slate-900 border border-slate-800">
-          {[
-            { id: 'ALL', label: 'All Fleet' },
-            { id: 'IN_SERVICE', label: 'In Service' },
-            { id: 'SECOND_LIFE', label: 'Second Life' },
-            { id: 'END_OF_LIFE', label: 'End of Life' },
-            { id: 'RECYCLED', label: 'Recycled' },
-          ].map(tab => (
+        {/* Controls: Segmented filters + Quick Register */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1 p-1 rounded-xl bg-white dark:bg-[#121F17] border border-[#E5E7EB] dark:border-[#1E382B] shadow-sm">
+            {[
+              { id: 'ALL', label: t.filterAll },
+              { id: 'IN_SERVICE', label: t.filterActive },
+              { id: 'SECOND_LIFE', label: t.filterSecondLife },
+              { id: 'END_OF_LIFE', label: t.filterEol },
+              { id: 'RECYCLED', label: t.filterTransferred },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setFilter(tab.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  filter === tab.id
+                    ? 'bg-[#14532D] text-white shadow-sm'
+                    : 'text-[#64748B] dark:text-[#94A3B8] hover:text-[#1F2937] dark:hover:text-white hover:bg-[#F8FAF7] dark:hover:bg-[#16261D]'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {(activeRole === 'MANUFACTURER' || activeRole === 'ADMINISTRATOR') && (
             <button
-              key={tab.id}
-              onClick={() => setFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                filter === tab.id
-                  ? 'bg-slate-800 text-emerald-400 shadow-sm border border-emerald-500/30'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              onClick={onNavigateCreate}
+              className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-[#14532D] hover:bg-[#166534] text-white text-xs font-bold shadow-sm transition-all"
             >
-              {tab.label}
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Register Battery</span>
             </button>
-          ))}
+          )}
         </div>
       </div>
 
       {/* Error state */}
       {error && (
-        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2">
-          <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+        <div className="p-4 rounded-2xl bg-[#FEE2E2] dark:bg-[#7F1D1D]/30 border border-[#FECACA] dark:border-[#991B1B] text-[#DC2626] dark:text-[#F87171] text-xs flex items-center space-x-2 font-medium">
+          <AlertCircle className="w-4 h-4 text-[#DC2626] flex-shrink-0" />
           <span>{error}</span>
         </div>
       )}
@@ -205,13 +213,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Loading & Grid */}
       {loading ? (
         <div className="text-center py-20 space-y-3">
-          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs text-slate-400">Loading battery passports from cryptographic registry...</p>
+          <div className="w-8 h-8 border-2 border-[#14532D] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-[#64748B] dark:text-[#94A3B8]">{t.loading}</p>
         </div>
       ) : passports.length === 0 ? (
-        <div className="text-center py-16 glass-panel rounded-3xl border border-slate-800 space-y-2">
-          <p className="text-sm font-semibold text-slate-300">No battery passports found matching filter.</p>
-          <p className="text-xs text-slate-500">Select another lifecycle status or mint a new passport.</p>
+        <div className="text-center py-16 bg-white dark:bg-[#121F17] rounded-3xl border border-[#E5E7EB] dark:border-[#1E382B] shadow-sm space-y-2">
+          <p className="text-sm font-semibold text-[#1F2937] dark:text-[#F1F5F9]">{t.noPassportsFound}</p>
+          <p className="text-xs text-[#64748B] dark:text-[#94A3B8]">Select another lifecycle status or mint a new passport.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
