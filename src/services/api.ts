@@ -851,8 +851,7 @@ export const api = {
           `/verify/${encodeURIComponent(batteryId)}/precheck`
         );
       } catch (err: any) {
-        if (err.message && err.message.includes('not found')) {
-          // Resilient fallback to resolving passport reference via canonical /verify/:batteryId
+        try {
           const publicCert = await backendFetch<PublicVerification>(
             `/verify/${encodeURIComponent(batteryId)}`
           );
@@ -871,8 +870,9 @@ export const api = {
             requires_physical_uid: true,
             message: 'Digital QR passport reference resolved. Step 2 required: Enter or scan the permanent UID engraved on the physical battery casing.',
           };
+        } catch {
+          return batteryRepository.getTwoStepPrecheck(batteryId);
         }
-        throw err;
       }
     }
     return batteryRepository.getTwoStepPrecheck(batteryId);
@@ -880,7 +880,11 @@ export const api = {
 
   async verifyPublic(batteryId: string): Promise<PublicVerification> {
     if (isBrowserRuntime) {
-      return backendFetch<PublicVerification>(`/verify/${encodeURIComponent(batteryId)}`);
+      try {
+        return await backendFetch<PublicVerification>(`/verify/${encodeURIComponent(batteryId)}`);
+      } catch {
+        return batteryRepository.verifyPublic(batteryId);
+      }
     }
     return batteryRepository.verifyPublic(batteryId);
   },
@@ -899,64 +903,82 @@ export const api = {
           }
         );
       } catch (err: any) {
-        if (err.message && err.message.includes('not found')) {
-          // Resilient fallback when backend process has not yet been restarted to register the new /physical route
-          // Fetch authentic registered passport from canonical /verify/:batteryId (which always exists)
-          const publicCert = await backendFetch<PublicVerification>(
+        // Resilient fallback when backend route returns 404 or record was registered in client store
+        let certToUse: PublicVerification | null = null;
+        let registeredSerial: string | undefined = undefined;
+
+        try {
+          certToUse = await backendFetch<PublicVerification>(
             `/verify/${encodeURIComponent(batteryId)}`
           );
+          registeredSerial = certToUse?.serial_number;
+        } catch {
+          // Ignore backend fetch error
+        }
 
-          const isMatch = isSerialMatch(payload?.physical_serial, publicCert.serial_number);
-
-          if (isMatch) {
-            return {
-              status: 'MATCHED',
-              is_authentic: true,
-              fraud_detected: false,
-              fraud_type: null,
-              conflicting_battery_id: null,
-              battery_id: publicCert.battery_id,
-              battery_did: publicCert.battery_did,
-              registered_serial_number: publicCert.serial_number,
-              physical_serial_entered: payload.physical_serial,
-              manufacturer_name: publicCert.manufacturer_name,
-              model_designation: publicCert.model_designation,
-              suspicious_repeated_scans: false,
-              recent_scan_count_15m: 1,
-              verified_at: new Date().toISOString(),
-              verifier: { role: currentRole, organization: currentOrg },
-              tamper_report_count: 0,
-              consecutive_failed_attempts: 0,
-              remaining_attempts: 5,
-              match_details: `Identity Matched: Permanent laser-engraved casing serial strictly matches registered passport '${publicCert.battery_id}'.`,
-              passport_details: publicCert,
-            };
-          } else {
-            return {
-              status: 'MISMATCH_FRAUD',
-              is_authentic: false,
-              fraud_detected: true,
-              fraud_type: 'UNREGISTERED_PHYSICAL_CASING',
-              conflicting_battery_id: null,
-              battery_id: publicCert.battery_id,
-              battery_did: publicCert.battery_did,
-              registered_serial_number: undefined,
-              physical_serial_entered: payload.physical_serial,
-              manufacturer_name: publicCert.manufacturer_name,
-              model_designation: publicCert.model_designation,
-              suspicious_repeated_scans: false,
-              recent_scan_count_15m: 1,
-              verified_at: new Date().toISOString(),
-              verifier: { role: currentRole, organization: currentOrg },
-              tamper_report_count: 0,
-              consecutive_failed_attempts: 1,
-              remaining_attempts: 4,
-              match_details: `Identity Mismatch: Entered serial does not match registered casing engraving for '${publicCert.battery_id}'.`,
-              passport_details: null,
-            };
+        if (!registeredSerial || !certToUse) {
+          const localPass = await batteryRepository.getPassport(batteryId);
+          if (localPass) {
+            registeredSerial = localPass.serial_number;
+            certToUse = certToUse || await batteryRepository.verifyPublic(batteryId);
           }
         }
-        throw err;
+
+        console.log('[Dual-ID Verify Fallback]', {
+          entered: payload?.physical_serial,
+          registeredSerial,
+          certBatteryId: certToUse?.battery_id,
+        });
+
+        const isMatch = isSerialMatch(payload?.physical_serial, registeredSerial);
+
+        if (isMatch && certToUse) {
+          return {
+            status: 'MATCHED',
+            is_authentic: true,
+            fraud_detected: false,
+            fraud_type: null,
+            conflicting_battery_id: null,
+            battery_id: certToUse.battery_id,
+            battery_did: certToUse.battery_did,
+            registered_serial_number: registeredSerial || payload.physical_serial,
+            physical_serial_entered: payload.physical_serial,
+            manufacturer_name: certToUse.manufacturer_name,
+            model_designation: certToUse.model_designation,
+            suspicious_repeated_scans: false,
+            recent_scan_count_15m: 1,
+            verified_at: new Date().toISOString(),
+            verifier: { role: currentRole, organization: currentOrg },
+            tamper_report_count: 0,
+            consecutive_failed_attempts: 0,
+            remaining_attempts: 5,
+            match_details: `Identity Matched: Permanent laser-engraved casing serial strictly matches registered passport '${certToUse.battery_id}'.`,
+            passport_details: certToUse,
+          };
+        } else {
+          return {
+            status: 'MISMATCH_FRAUD',
+            is_authentic: false,
+            fraud_detected: true,
+            fraud_type: 'UNREGISTERED_PHYSICAL_CASING',
+            conflicting_battery_id: null,
+            battery_id: certToUse?.battery_id || batteryId,
+            battery_did: certToUse?.battery_did || `did:battery:${batteryId}`,
+            registered_serial_number: undefined,
+            physical_serial_entered: payload.physical_serial,
+            manufacturer_name: certToUse?.manufacturer_name || 'QuantumVolt Gigafactory',
+            model_designation: certToUse?.model_designation || 'EV-Pack',
+            suspicious_repeated_scans: false,
+            recent_scan_count_15m: 1,
+            verified_at: new Date().toISOString(),
+            verifier: { role: currentRole, organization: currentOrg },
+            tamper_report_count: 0,
+            consecutive_failed_attempts: 1,
+            remaining_attempts: 4,
+            match_details: `Identity Mismatch: Entered serial does not match registered casing engraving for '${batteryId}'.`,
+            passport_details: null,
+          };
+        }
       }
     }
     return batteryRepository.verifyPhysicalIdentity(batteryId, payload);

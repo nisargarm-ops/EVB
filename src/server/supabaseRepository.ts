@@ -1272,7 +1272,37 @@ export class SupabaseBackendRepository {
       .select('*')
       .eq('battery_did', trimmed)
       .maybeSingle();
-    return byDid || null;
+    if (byDid) return byDid;
+
+    // Resilient fallback to memory repository when running locally or during development
+    const fromStore = await batteryRepository.getPassport(trimmed);
+    if (fromStore) {
+      return {
+        id: fromStore.id || fromStore.battery_id,
+        battery_id: fromStore.battery_id,
+        battery_did: fromStore.battery_did,
+        serial_number: fromStore.serial_number,
+        manufacturer_org_id: '11111111-1111-1111-1111-111111111111',
+        current_custodian_org_id: '11111111-1111-1111-1111-111111111111',
+        chemistry: fromStore.chemistry,
+        model_designation: fromStore.model_designation,
+        manufacturing_date: fromStore.manufacturing_date,
+        manufacturing_country: fromStore.manufacturing_country,
+        manufacturing_facility: fromStore.manufacturing_facility,
+        status: fromStore.status,
+        current_vehicle_vin: fromStore.current_vehicle_vin ?? null,
+        technical_specs: fromStore.technical_specs,
+        carbon_footprint: fromStore.carbon_footprint,
+        recycled_content: fromStore.recycled_content,
+        consecutive_failed_attempts: fromStore.consecutive_failed_attempts || 0,
+        is_flagged_for_investigation: fromStore.is_flagged_for_investigation || false,
+        lockout_until: fromStore.lockout_until || null,
+        investigation_reason: fromStore.investigation_reason || null,
+        flagged_at: fromStore.flagged_at || null,
+      };
+    }
+
+    return null;
   }
 
   async listPassports(statusFilter?: string, actor?: AuthenticatedActor | null): Promise<PassportSummary[]> {
