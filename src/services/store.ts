@@ -6,6 +6,11 @@ import type {
   DispositionDecision,
   AuditVerification,
   PublicVerification,
+  PhysicalVerificationRequest,
+  PhysicalVerificationResponse,
+  TamperReportRequest,
+  TamperReportResponse,
+  FraudAuditStatus,
   Organization
 } from '../types/index.ts';
 import {
@@ -20,12 +25,16 @@ const STORAGE_KEY_PASSPORTS = 'bp360_passports_v2';
 const STORAGE_KEY_CUSTODY = 'bp360_custody_events_v2';
 const STORAGE_KEY_TRANSFERS = 'bp360_custody_transfers_v2';
 const STORAGE_KEY_DECISIONS = 'bp360_decisions_v2';
+const STORAGE_KEY_VERIFICATIONS = 'bp360_physical_verifications_v1';
+const STORAGE_KEY_TAMPER_REPORTS = 'bp360_tamper_reports_v1';
 
 export class BatteryRepository {
   private passports: Map<string, BatteryPassport> = new Map();
   private custodyEvents: Map<string, CustodyEvent[]> = new Map();
   private custodyTransfers: Map<string, CustodyTransfer> = new Map();
   private dispositionDecisions: Map<string, DispositionDecision> = new Map();
+  private physicalVerifications: Map<string, PhysicalVerificationResponse[]> = new Map();
+  private tamperReports: Map<string, TamperReportResponse[]> = new Map();
   private organizations: Map<string, Organization> = new Map();
 
   constructor() {
@@ -39,6 +48,8 @@ export class BatteryRepository {
     const savedCustody = safeStorage.getItem(STORAGE_KEY_CUSTODY);
     const savedTransfers = safeStorage.getItem(STORAGE_KEY_TRANSFERS);
     const savedDecisions = safeStorage.getItem(STORAGE_KEY_DECISIONS);
+    const savedVerifications = safeStorage.getItem(STORAGE_KEY_VERIFICATIONS);
+    const savedTamper = safeStorage.getItem(STORAGE_KEY_TAMPER_REPORTS);
 
     if (savedPassports && savedCustody) {
       try {
@@ -63,6 +74,18 @@ export class BatteryRepository {
             this.dispositionDecisions.set(id, d);
           }
         }
+        if (savedVerifications) {
+          const parsedV: Record<string, PhysicalVerificationResponse[]> = JSON.parse(savedVerifications);
+          for (const [id, list] of Object.entries(parsedV)) {
+            this.physicalVerifications.set(id, list);
+          }
+        }
+        if (savedTamper) {
+          const parsedT: Record<string, TamperReportResponse[]> = JSON.parse(savedTamper);
+          for (const [id, list] of Object.entries(parsedT)) {
+            this.tamperReports.set(id, list);
+          }
+        }
         return;
       } catch (e) {
         console.warn('Failed to parse cached records, restoring seed data', e);
@@ -82,11 +105,17 @@ export class BatteryRepository {
       for (const [k, v] of this.custodyTransfers.entries()) tObj[k] = v;
       const dObj: Record<string, DispositionDecision> = {};
       for (const [k, v] of this.dispositionDecisions.entries()) dObj[k] = v;
+      const vObj: Record<string, PhysicalVerificationResponse[]> = {};
+      for (const [k, v] of this.physicalVerifications.entries()) vObj[k] = v;
+      const trObj: Record<string, TamperReportResponse[]> = {};
+      for (const [k, v] of this.tamperReports.entries()) trObj[k] = v;
 
       safeStorage.setItem(STORAGE_KEY_PASSPORTS, JSON.stringify(pObj));
       safeStorage.setItem(STORAGE_KEY_CUSTODY, JSON.stringify(cObj));
       safeStorage.setItem(STORAGE_KEY_TRANSFERS, JSON.stringify(tObj));
       safeStorage.setItem(STORAGE_KEY_DECISIONS, JSON.stringify(dObj));
+      safeStorage.setItem(STORAGE_KEY_VERIFICATIONS, JSON.stringify(vObj));
+      safeStorage.setItem(STORAGE_KEY_TAMPER_REPORTS, JSON.stringify(trObj));
     } catch (e) {
       console.warn('Persistence update warning', e);
     }
@@ -1044,10 +1073,20 @@ export class BatteryRepository {
     const events = this.custodyEvents.get(batteryId) || [];
     const { isValid } = verifyChainIntegrity(events);
 
+    const history = this.physicalVerifications.get(passport.battery_id) || [];
+    const tamperList = this.tamperReports.get(passport.battery_id) || [];
+    const fifteenMinutesAgo = Date.now() - 15 * 60 * 1000;
+    const recentScans = history.filter(
+      v => new Date(v.verified_at).getTime() >= fifteenMinutesAgo
+    );
+
+    const lastVerification = history.length > 0 ? history[history.length - 1] : null;
+
     return {
       is_authentic: true,
       battery_id: passport.battery_id,
       battery_did: passport.battery_did,
+      serial_number: passport.serial_number,
       manufacturer_name: passport.manufacturer_name,
       model_designation: passport.model_designation,
       chemistry: passport.chemistry,
@@ -1059,6 +1098,170 @@ export class BatteryRepository {
       total_custody_events: events.length,
       is_audit_chain_valid: isValid,
       verification_timestamp: new Date().toISOString(),
+      physical_verification_status: lastVerification ? lastVerification.status : 'PENDING_INSPECTION',
+      tamper_report_count: tamperList.length,
+      recent_scan_count_15m: recentScans.length,
+      suspicious_repeated_scans: recentScans.length >= 5,
+    };
+  }
+
+  async verifyPhysicalIdentity(
+    batteryIdOrDid: string,
+    payload: PhysicalVerificationRequest,
+    actor?: { role: string; organization?: string; id?: string } | null,
+    clientIp?: string
+  ): Promise<PhysicalVerificationResponse> {
+    const passport = await this.getPassport(batteryIdOrDid);
+    if (!passport) {
+      throw new Error(`Battery passport '${batteryIdOrDid}' not found in registry`);
+    }
+
+    const cleanEntered = String(payload.physical_serial || '').trim().toUpperCase();
+    const cleanRegistered = String(passport.serial_number || '').trim().toUpperCase();
+
+    // 15-minute velocity check
+    const now = Date.now();
+    const fifteenMinutesAgo = now - 15 * 60 * 1000;
+    const history = this.physicalVerifications.get(passport.battery_id) || [];
+    const recentScans = history.filter(
+      v => new Date(v.verified_at).getTime() >= fifteenMinutesAgo
+    );
+    const recentCount = recentScans.length + 1; // including this one
+    const suspiciousRepeatedScans = recentCount >= 5;
+
+    // Tamper report count
+    const tamperCount = this.tamperReports.get(passport.battery_id)?.length || 0;
+
+    let status: PhysicalVerificationResponse['status'] = 'MATCHED';
+    let isAuthentic = true;
+    let fraudDetected = false;
+    let fraudType: PhysicalVerificationResponse['fraud_type'] = null;
+    let conflictingBatteryId: string | null = null;
+    let matchDetails = '';
+
+    if (cleanEntered === cleanRegistered && cleanEntered.length > 0) {
+      status = 'MATCHED';
+      isAuthentic = true;
+      fraudDetected = false;
+      matchDetails = `Identity Matched: Permanent laser-engraved casing serial '${passport.serial_number}' strictly matches registered passport '${passport.battery_id}'.`;
+    } else {
+      // Check if this serial belongs to another battery (QR Swap fraud)
+      const otherBattery = Array.from(this.passports.values()).find(
+        p => p.battery_id !== passport.battery_id && p.serial_number.trim().toUpperCase() === cleanEntered
+      );
+
+      if (otherBattery) {
+        status = 'MISMATCH_FRAUD';
+        isAuthentic = false;
+        fraudDetected = true;
+        fraudType = 'QR_STICKER_SWAP_DETECTED';
+        conflictingBatteryId = otherBattery.battery_id;
+        matchDetails = `CRITICAL FRAUD ALERT: Physical casing serial '${payload.physical_serial}' belongs to a different battery passport (${otherBattery.battery_id}). This indicates a counterfeit or swapped QR label affixed to a different physical pack.`;
+      } else {
+        status = 'UNREGISTERED_SERIAL';
+        isAuthentic = false;
+        fraudDetected = true;
+        fraudType = 'UNREGISTERED_PHYSICAL_CASING';
+        matchDetails = `Identity Mismatch: Serial '${payload.physical_serial}' does not match registered passport serial and does not exist in the official manufacturer registry.`;
+      }
+    }
+
+    const verificationRecord: PhysicalVerificationResponse = {
+      status,
+      is_authentic: isAuthentic,
+      battery_id: passport.battery_id,
+      battery_did: passport.battery_did,
+      registered_serial_number: passport.serial_number,
+      physical_serial_entered: payload.physical_serial,
+      manufacturer_name: passport.manufacturer_name,
+      model_designation: passport.model_designation,
+      match_details: matchDetails,
+      fraud_detected: fraudDetected,
+      fraud_type: fraudType,
+      conflicting_battery_id: conflictingBatteryId,
+      suspicious_repeated_scans: suspiciousRepeatedScans,
+      recent_scan_count_15m: recentCount,
+      verified_at: new Date().toISOString(),
+      verifier: {
+        id: actor?.id,
+        role: actor?.role || 'PUBLIC',
+        organization: actor?.organization,
+      },
+      tamper_report_count: tamperCount,
+    };
+
+    history.push(verificationRecord);
+    this.physicalVerifications.set(passport.battery_id, history);
+    this.persist();
+
+    return verificationRecord;
+  }
+
+  async reportTampering(
+    batteryIdOrDid: string,
+    payload: TamperReportRequest,
+    actor?: { role: string; organization?: string; id?: string } | null,
+    _clientIp?: string
+  ): Promise<TamperReportResponse> {
+    const passport = await this.getPassport(batteryIdOrDid);
+    if (!passport) {
+      throw new Error(`Battery passport '${batteryIdOrDid}' not found in registry`);
+    }
+
+    const reportId = 'TR-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+    const record: TamperReportResponse = {
+      success: true,
+      report_id: reportId,
+      battery_id: passport.battery_id,
+      status: 'INVESTIGATION_PENDING',
+      message: `Tamper incident '${payload.reason}' reported and logged onto immutable security audit trail.`,
+      timestamp: new Date().toISOString(),
+    };
+
+    const list = this.tamperReports.get(passport.battery_id) || [];
+    list.push(record);
+    this.tamperReports.set(passport.battery_id, list);
+    this.persist();
+
+    return record;
+  }
+
+  async getFraudStatus(batteryIdOrDid: string): Promise<FraudAuditStatus> {
+    const passport = await this.getPassport(batteryIdOrDid);
+    if (!passport) {
+      throw new Error(`Battery passport '${batteryIdOrDid}' not found in registry`);
+    }
+
+    const history = this.physicalVerifications.get(passport.battery_id) || [];
+    const tamperList = this.tamperReports.get(passport.battery_id) || [];
+
+    const now = Date.now();
+    const fifteenMinutesAgo = now - 15 * 60 * 1000;
+    const recentScans = history.filter(
+      v => new Date(v.verified_at).getTime() >= fifteenMinutesAgo
+    );
+
+    const matchedCount = history.filter(v => v.status === 'MATCHED').length;
+    const fraudAlertsCount = history.filter(v => v.fraud_detected).length;
+    const lastVerification = history.length > 0 ? history[history.length - 1] : null;
+
+    return {
+      battery_id: passport.battery_id,
+      battery_did: passport.battery_did,
+      registered_serial_number: passport.serial_number,
+      total_physical_verifications: history.length,
+      matched_count: matchedCount,
+      fraud_alerts_count: fraudAlertsCount,
+      tamper_reports_count: tamperList.length,
+      recent_scan_count_15m: recentScans.length,
+      suspicious_repeated_scans: recentScans.length >= 5,
+      last_physical_verification: lastVerification
+        ? {
+            status: lastVerification.status,
+            verified_at: lastVerification.verified_at,
+            verifier_role: lastVerification.verifier.role,
+          }
+        : null,
     };
   }
 

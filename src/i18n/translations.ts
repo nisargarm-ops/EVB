@@ -106,6 +106,29 @@ export interface Translations {
   verifyGenesisSignature: string;
   verifyPhysicalDisclaimer: string;
 
+  // Dual-ID & Anti-Fraud
+  dualIdSectionTitle: string;
+  dualIdSectionSubtitle: string;
+  laserSerialLabel: string;
+  laserSerialPlaceholder: string;
+  verifyPhysicalBtn: string;
+  scanBarcodeBtn: string;
+  statusMatched: string;
+  statusMismatchFraud: string;
+  statusUnregistered: string;
+  statusVerificationRequired: string;
+  qrOnlyDisclaimer: string;
+  testMatchingSample: string;
+  testSwapFraudSample: string;
+  testCounterfeitSample: string;
+  reportTamperTitle: string;
+  reportTamperDesc: string;
+  reportTamperReason: string;
+  reportTamperDetails: string;
+  submitTamperReport: string;
+  tamperReportSuccess: string;
+  suspiciousVelocityWarning: string;
+
   // Auth & Roles
   authSignIn: string;
   authSignUp: string;
@@ -235,6 +258,29 @@ export const translations: Record<Language, Translations> = {
     verifyGenesisSignature: 'Manufacturer Genesis Signature',
     verifyPhysicalDisclaimer: 'Metrology and authenticity records cryptographically sealed on tamper-evident ledger.',
 
+    // Dual-ID & Anti-Fraud
+    dualIdSectionTitle: 'Dual-ID Physical Casing Verification',
+    dualIdSectionSubtitle: 'Permanent laser-engraved casing serial & 2D barcode cross-check against cryptographically registered passport.',
+    laserSerialLabel: 'Laser-Engraved Serial / Casing Barcode',
+    laserSerialPlaceholder: 'e.g. QV-2024-NMC-98124',
+    verifyPhysicalBtn: 'Verify Physical Identity',
+    scanBarcodeBtn: 'Scan Casing Barcode',
+    statusMatched: 'Identity Matched',
+    statusMismatchFraud: 'Identity Mismatch — Possible Fraud',
+    statusUnregistered: 'Unregistered Casing Serial',
+    statusVerificationRequired: 'Verification Required',
+    qrOnlyDisclaimer: 'Never mark a battery as verified solely because its QR code opens successfully. Physical inspection must confirm matching laser-engraved identifiers on the battery casing.',
+    testMatchingSample: 'Test Genuine Serial',
+    testSwapFraudSample: 'Test QR Swap Fraud',
+    testCounterfeitSample: 'Test Counterfeit Serial',
+    reportTamperTitle: 'Report Suspected QR Label / Seal Tampering',
+    reportTamperDesc: 'Log suspected sticker relabeling, scratched casing serials, or damaged seals onto the immutable regulatory audit trail.',
+    reportTamperReason: 'Tampering Reason',
+    reportTamperDetails: 'Incident Description & Observations',
+    submitTamperReport: 'Submit Tamper Incident Report',
+    tamperReportSuccess: 'Tamper report securely logged to regulatory ledger for audit investigation.',
+    suspiciousVelocityWarning: 'Notice: High scan frequency detected for this passport in recent minutes. Conduct thorough physical casing and seal inspection.',
+
     // Auth & Roles
     authSignIn: 'Sign In to Enterprise Workspace',
     authSignUp: 'Create Enterprise Account',
@@ -363,6 +409,29 @@ export const translations: Record<Language, Translations> = {
     verifyGenesisSignature: 'ಉತ್ಪಾದಕರ ಡಿಜಿಟಲ್ ಸಹಿ',
     verifyPhysicalDisclaimer: 'ದಾಖಲೆಗಳು ಕ್ರಿಪ್ಟೋಗ್ರಾಫಿಕಲಿ ಸುರಕ್ಷಿತವಾಗಿದ್ದು ಬದಲಾಯಿಸಲಾಗದು.',
 
+    // Dual-ID & Anti-Fraud
+    dualIdSectionTitle: 'ದ್ವಂದ್ವ-ID ಭೌತಿಕ ಕೇಸಿಂಗ್ ಪರಿಶೀಲನೆ',
+    dualIdSectionSubtitle: 'ಖಾಯಂ ಲೇಸರ್ ಕೆತ್ತಿದ ಸರಣಿ ಸಂಖ್ಯೆ ಮತ್ತು 2D ಬಾರ್‌ಕೋಡ್ ಅನ್ನು ಡಿಜಿಟಲ್ ಪಾಸ್‌ಪೋರ್ಟ್‌ನೊಂದಿಗೆ ತಾಳೆ ನೋಡಿ.',
+    laserSerialLabel: 'ಲೇಸರ್ ಕೆತ್ತಿದ ಸರಣಿ ಸಂಖ್ಯೆ / ಕೇಸಿಂಗ್ ಬಾರ್‌ಕೋಡ್',
+    laserSerialPlaceholder: 'ಉದಾ. QV-2024-NMC-98124',
+    verifyPhysicalBtn: 'ಭೌತಿಕ ಗುರುತನ್ನು ಪರಿಶೀಲಿಸಿ',
+    scanBarcodeBtn: 'ಕೇಸಿಂಗ್ ಬಾರ್‌ಕೋಡ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ',
+    statusMatched: 'ಗುರುತು ಹೊಂದಿಕೆಯಾಗಿದೆ',
+    statusMismatchFraud: 'ಗುರುತು ಹೊಂದಿಕೆಯಾಗುತ್ತಿಲ್ಲ — ಸಂಭಾವ್ಯ ವಂಚನೆ',
+    statusUnregistered: 'ಅನೋಂದಾಯಿತ ಕೇಸಿಂಗ್ ಸರಣಿ ಸಂಖ್ಯೆ',
+    statusVerificationRequired: 'ಪರಿಶೀಲನೆ ಅಗತ್ಯವಿದೆ',
+    qrOnlyDisclaimer: 'QR ಕೋಡ್ ತೆರೆದ ಮಾತ್ರಕ್ಕೆ ಬ್ಯಾಟರಿಯನ್ನು ಅಧಿಕೃತವೆಂದು ಪರಿಗಣಿಸಬೇಡಿ. ಬ್ಯಾಟರಿ ಮೇಲಿನ ಲೇಸರ್ ಕೆತ್ತನೆಯನ್ನು ಪರಿಶೀಲಿಸುವುದು ಕಡ್ಡಾಯವಾಗಿದೆ.',
+    testMatchingSample: 'ಅಸಲಿ ಸರಣಿ ಪರೀಕ್ಷಿಸಿ',
+    testSwapFraudSample: 'QR ಅದಲುಬದಲು ವಂಚನೆ ಪರೀಕ್ಷಿಸಿ',
+    testCounterfeitSample: 'ನಕಲಿ ಸರಣಿ ಪರೀಕ್ಷಿಸಿ',
+    reportTamperTitle: 'QR ಲೇಬಲ್ / ಸೀಲ್ ತಿರುಚುವಿಕೆಯನ್ನು ವರದಿ ಮಾಡಿ',
+    reportTamperDesc: 'ಸ್ಟಿಕ್ಕರ್ ಬದಲಾವಣೆ ಅಥವಾ ಗೀಚಿದ ಸರಣಿ ಸಂಖ್ಯೆ ಕಂಡುಬಂದರೆ ಲೆಡ್ಜರ್‌ನಲ್ಲಿ ವರದಿ ದಾಖಲಿಸಿ.',
+    reportTamperReason: 'ತಿರುಚುವಿಕೆಯ ಕಾರಣ',
+    reportTamperDetails: 'ಘಟನೆಯ ವಿವರಣೆ ಮತ್ತು ಅವಲೋಕನಗಳು',
+    submitTamperReport: 'ವರದಿ ಸಲ್ಲಿಸಿ',
+    tamperReportSuccess: 'ತಿರುಚುವಿಕೆಯ ವರದಿಯನ್ನು ಲೆಡ್ಜರ್‌ನಲ್ಲಿ ಯಶಸ್ವಿಯಾಗಿ ದಾಖಲಿಸಲಾಗಿದೆ.',
+    suspiciousVelocityWarning: 'ಗಮನಿಸಿ: ಇತ್ತೀಚಿನ ನಿಮಿಷಗಳಲ್ಲಿ ಈ ಪಾಸ್‌ಪೋರ್ಟ್‌ಗಾಗಿ ಹೆಚ್ಚಿನ ಸ್ಕ್ಯಾನ್ ಆವರ್ತನ ಕಂಡುಬಂದಿದೆ. ಸೀಲ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.',
+
     // Auth & Roles
     authSignIn: 'ಎಂಟರ್‌ಪ್ರೈಸ್ ಕಾರ್ಯಸ್ಥಳಕ್ಕೆ ಲಾಗಿನ್ ಆಗಿ',
     authSignUp: 'ಹೊಸ ಖಾತೆ ತೆರೆಯಿರಿ',
@@ -490,6 +559,29 @@ export const translations: Record<Language, Translations> = {
     verifyTamperEvidentHash: 'क्रिप्टोग्राफ़िक SHA-256 हैश चेन',
     verifyGenesisSignature: 'निर्माता डिजिटल हस्ताक्षर',
     verifyPhysicalDisclaimer: 'मेट्रोलॉजी और प्रामाणिकता रिकॉर्ड क्रिप्टोग्राफ़िक रूप से सुरक्षित हैं।',
+
+    // Dual-ID & Anti-Fraud
+    dualIdSectionTitle: 'दोहरी-ID (Dual-ID) भौतिक केसिंग सत्यापन',
+    dualIdSectionSubtitle: 'स्थायी लेजर-उत्कीर्ण सीरियल नंबर और 2D बारकोड का डिजिटल पासपोर्ट के साथ मिलान करें।',
+    laserSerialLabel: 'लेजर-उत्कीर्ण सीरियल / केसिंग बारकोड',
+    laserSerialPlaceholder: 'उदा. QV-2024-NMC-98124',
+    verifyPhysicalBtn: 'भौतिक पहचान सत्यापित करें',
+    scanBarcodeBtn: 'केसिंग बारकोड स्कैन करें',
+    statusMatched: 'पहचान मेल खाती है',
+    statusMismatchFraud: 'पहचान मेल नहीं खाती — संभावित धोखाधड़ी',
+    statusUnregistered: 'अस्वीकृत / गैर-पंजीकृत केसिंग सीरियल',
+    statusVerificationRequired: 'सत्यापन आवश्यक है',
+    qrOnlyDisclaimer: 'केवल QR कोड खुलने पर किसी बैटरी को सत्यापित न मानें। पैक केसिंग पर लेजर-उत्कीर्ण सीरियल नंबर की पुष्टि अनिवार्य है।',
+    testMatchingSample: 'असली सीरियल जांचें',
+    testSwapFraudSample: 'QR स्वैप धोखाधड़ी जांचें',
+    testCounterfeitSample: 'नकली सीरियल जांचें',
+    reportTamperTitle: 'संदिग्ध QR लेबल / सील छेड़छाड़ की रिपोर्ट करें',
+    reportTamperDesc: 'स्टिकर बदलने, खरोंचे गए सीरियल या टूटी सील की रिपोर्ट रेगुलेटरी लेज़र पर दर्ज करें।',
+    reportTamperReason: 'छेड़छाड़ का कारण',
+    reportTamperDetails: 'घटना का विवरण और अवलोकन',
+    submitTamperReport: 'छेड़छाड़ रिपोर्ट सबमिट करें',
+    tamperReportSuccess: 'छेड़छाड़ रिपोर्ट ऑडिट जांच के लिए सुरक्षित रूप से लेज़र में दर्ज कर ली गई है।',
+    suspiciousVelocityWarning: 'सूचना: इस पासपोर्ट के लिए हाल के मिनटों में उच्च स्कैन आवृत्ति का पता चला है। केसिंग और सील की सावधानीपूर्वक जांच करें।',
 
     // Auth & Roles
     authSignIn: 'एंटरप्राइज वर्कस्पेस में साइन इन करें',

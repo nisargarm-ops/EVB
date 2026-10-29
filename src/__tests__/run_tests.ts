@@ -256,10 +256,127 @@ async function runTestSuite() {
     const validPublic =
       verified.is_authentic === true &&
       (verified as any).internal_cost_breakdown === undefined &&
-      (verified as any).raw_telemetry === undefined;
-    assert(validPublic, 'Test 12: Public QR verification continues to work securely without credentials');
+      (verified as any).raw_telemetry === undefined &&
+      verified.serial_number === 'QV-2024-NMC-98124';
+    assert(validPublic, 'Test 12: Public QR verification continues to work securely without credentials and contains physical serial binding');
   } catch (e: any) {
     assert(false, 'Test 12', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 13: Dual-ID: Matching laser-engraved casing serial succeeds (MATCHED)
+  // --------------------------------------------------------------------------
+  try {
+    const matchRes = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-NMC-8A2F91C0',
+      { physical_serial: 'QV-2024-NMC-98124', barcode_type: 'LASER_ETCHED' },
+      { role: 'REGULATOR_AUDITOR', organization: 'EU Metrology Authority' }
+    );
+    const isMatched =
+      matchRes.status === 'MATCHED' &&
+      matchRes.is_authentic === true &&
+      matchRes.fraud_detected === false &&
+      matchRes.registered_serial_number === 'QV-2024-NMC-98124';
+    assert(isMatched, 'Test 13: Dual-ID: Matching laser serial returns Identity Matched (200 OK)');
+  } catch (e: any) {
+    assert(false, 'Test 13', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 14: Dual-ID Anti-Fraud: QR Sticker Swap detected (MISMATCH_FRAUD)
+  // --------------------------------------------------------------------------
+  try {
+    // Pack 1 (BAT-NMC-8A2F91C0) inspected, but casing has serial belonging to Pack 2 (BAT-LFP-3C7D410E: NBS-2023-LFP-44109)
+    const fraudRes = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-NMC-8A2F91C0',
+      { physical_serial: 'NBS-2023-LFP-44109', barcode_type: 'DATA_MATRIX' },
+      { role: 'PUBLIC', organization: 'Anonymous Citizen' }
+    );
+    const isSwapDetected =
+      fraudRes.status === 'MISMATCH_FRAUD' &&
+      fraudRes.is_authentic === false &&
+      fraudRes.fraud_detected === true &&
+      fraudRes.fraud_type === 'QR_STICKER_SWAP_DETECTED' &&
+      fraudRes.conflicting_battery_id === 'BAT-LFP-3C7D410E';
+    assert(isSwapDetected, 'Test 14: Dual-ID Anti-Fraud: QR label swap correctly flagged with conflicting passport ID');
+  } catch (e: any) {
+    assert(false, 'Test 14', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 15: Dual-ID Anti-Fraud: Unregistered counterfeit serial rejected
+  // --------------------------------------------------------------------------
+  try {
+    const unregRes = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-NMC-8A2F91C0',
+      { physical_serial: 'FAKE-COUNTERFEIT-PACK-99999', barcode_type: 'MANUAL' }
+    );
+    const isUnregistered =
+      unregRes.status === 'UNREGISTERED_SERIAL' &&
+      unregRes.is_authentic === false &&
+      unregRes.fraud_detected === true &&
+      unregRes.fraud_type === 'UNREGISTERED_PHYSICAL_CASING';
+    assert(isUnregistered, 'Test 15: Dual-ID Anti-Fraud: Unregistered counterfeit serial number rejected');
+  } catch (e: any) {
+    assert(false, 'Test 15', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 16: Duplicate serial number registration strictly rejected
+  // --------------------------------------------------------------------------
+  try {
+    let duplicateRejected = false;
+    try {
+      await batteryRepository.createPassport(
+        {
+          serial_number: 'QV-2024-NMC-98124', // Already exists for BAT-NMC-8A2F91C0
+          manufacturer_name: 'QuantumVolt Gigafactory',
+          model_designation: 'DuplicatePackAttempt',
+          chemistry: 'NMC 811',
+        },
+        { role: 'MANUFACTURER', organization: 'QuantumVolt Gigafactory' }
+      );
+    } catch (err: any) {
+      if (err.message.includes('Duplicate registration rejected')) duplicateRejected = true;
+    }
+    assert(duplicateRejected, 'Test 16: Duplicate physical serial registration rejected (409 Conflict)');
+  } catch (e: any) {
+    assert(false, 'Test 16', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 17: Tamper incident reporting logs onto regulatory audit trail
+  // --------------------------------------------------------------------------
+  try {
+    const tamperRes = await batteryRepository.reportTampering(
+      'BAT-NMC-8A2F91C0',
+      {
+        reason: 'REPLACED_QR_STICKER',
+        description: 'Physical adhesive sticker shows signs of peeling and relabeling over original laser etching.',
+      },
+      { role: 'SERVICE_CENTER', organization: 'Berlin EV Service & Diagnostics' }
+    );
+    const isLogged =
+      tamperRes.success === true &&
+      tamperRes.report_id.startsWith('TR-') &&
+      tamperRes.status === 'INVESTIGATION_PENDING';
+    assert(isLogged, 'Test 17: Suspected QR label tampering successfully reported and logged to audit trail');
+  } catch (e: any) {
+    assert(false, 'Test 17', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 18: Anti-fraud status summary reflects verifications and velocity
+  // --------------------------------------------------------------------------
+  try {
+    const fraudStatus = await batteryRepository.getFraudStatus('BAT-NMC-8A2F91C0');
+    const hasAuditSummary =
+      fraudStatus.battery_id === 'BAT-NMC-8A2F91C0' &&
+      fraudStatus.total_physical_verifications >= 2 &&
+      fraudStatus.tamper_reports_count >= 1;
+    assert(hasAuditSummary, 'Test 18: Battery anti-fraud summary aggregates physical checks and tamper incidents');
+  } catch (e: any) {
+    assert(false, 'Test 18', e.message);
   }
 
   console.log('\n----------------------------------------------------------------');

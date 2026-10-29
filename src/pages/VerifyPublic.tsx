@@ -9,11 +9,19 @@ import {
   Calendar, 
   FileCheck2,
   Camera,
-  Upload
+  Barcode,
+  Fingerprint,
+  Flag,
+  AlertOctagon,
+  ShieldAlert,
+  Info,
+  Check,
+  X
 } from 'lucide-react';
-import { PublicVerification } from '../types';
+import { PublicVerification, PhysicalVerificationResponse } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
+import { QRScannerModal } from '../components/QRScannerModal';
 
 interface VerifyPublicProps {
   initialId?: string;
@@ -33,10 +41,29 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [verifiedNonce, setVerifiedNonce] = useState<string>('');
 
+  // Dual-ID Physical Verification State
+  const [physicalSerial, setPhysicalSerial] = useState('');
+  const [inspectorNotes, setInspectorNotes] = useState('');
+  const [physicalLoading, setPhysicalLoading] = useState(false);
+  const [physicalResult, setPhysicalResult] = useState<PhysicalVerificationResponse | null>(null);
+  const [physicalError, setPhysicalError] = useState<string | null>(null);
+  const [isCasingScannerOpen, setIsCasingScannerOpen] = useState(false);
+
+  // Tamper Reporting State
+  const [showTamperModal, setShowTamperModal] = useState(false);
+  const [tamperReason, setTamperReason] = useState<'REPLACED_QR_STICKER' | 'SCRATCHED_SERIAL' | 'MISMATCHED_CASING' | 'DAMAGED_SEAL' | 'OTHER'>('REPLACED_QR_STICKER');
+  const [tamperDesc, setTamperDesc] = useState('');
+  const [submittingTamper, setSubmittingTamper] = useState(false);
+  const [tamperSuccess, setTamperSuccess] = useState<string | null>(null);
+
   const handleVerify = async (idToVerify: string) => {
     if (!idToVerify.trim()) return;
     setLoading(true);
     setError(null);
+    setPhysicalResult(null);
+    setPhysicalError(null);
+    setPhysicalSerial('');
+    setTamperSuccess(null);
     try {
       const res = await api.verifyPublic(idToVerify.trim());
       setResult(res);
@@ -46,6 +73,52 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
       setResult(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePhysicalVerify = async (serialToVerify?: string) => {
+    const targetSerial = (serialToVerify ?? physicalSerial).trim();
+    if (!targetSerial) {
+      setPhysicalError('Please enter or scan the permanent laser-etched serial number from the battery pack casing.');
+      return;
+    }
+    if (!result) return;
+
+    setPhysicalLoading(true);
+    setPhysicalError(null);
+    try {
+      const outcome = await api.verifyPhysicalIdentity(result.battery_id, {
+        physical_serial: targetSerial,
+        inspector_notes: inspectorNotes.trim() || undefined,
+        barcode_type: 'LASER_ETCHED',
+      });
+      setPhysicalResult(outcome);
+    } catch (err: any) {
+      setPhysicalError(err.message || 'Physical identity verification failed.');
+      setPhysicalResult(null);
+    } finally {
+      setPhysicalLoading(false);
+    }
+  };
+
+  const handleSubmitTamperReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!result || !tamperDesc.trim()) return;
+
+    setSubmittingTamper(true);
+    try {
+      const report = await api.reportTampering(result.battery_id, {
+        reason: tamperReason,
+        description: tamperDesc.trim(),
+        reported_serial: physicalSerial.trim() || undefined,
+      });
+      setTamperSuccess(report.message || t.tamperReportSuccess);
+      setShowTamperModal(false);
+      setTamperDesc('');
+    } catch (err: any) {
+      setPhysicalError(err.message || 'Failed to submit tamper report.');
+    } finally {
+      setSubmittingTamper(false);
     }
   };
 
@@ -132,6 +205,25 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
       {result && (
         <div className="space-y-6">
           <div className="bg-white dark:bg-[#121F17] rounded-3xl p-6 sm:p-8 border border-[#D1FAE5] dark:border-[#1E382B] relative overflow-hidden shadow-sm">
+            {/* Suspicious Velocity Alert Banner (if scan velocity threshold exceeded) */}
+            {(result.suspicious_repeated_scans || (physicalResult?.suspicious_repeated_scans)) && (
+              <div className="mb-6 p-4 rounded-2xl bg-[#FEF3C7] dark:bg-[#78350F]/30 border border-[#FDE68A] dark:border-[#92400E] text-[#92400E] dark:text-[#FDE68A] text-xs flex items-start space-x-3">
+                <Info className="w-4 h-4 mt-0.5 shrink-0 text-[#D97706]" />
+                <div className="space-y-0.5">
+                  <div className="font-bold">Scan Frequency Velocity Notice</div>
+                  <p>{t.suspiciousVelocityWarning}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Tamper Report Success Notice */}
+            {tamperSuccess && (
+              <div className="mb-6 p-4 rounded-2xl bg-[#ECFDF3] dark:bg-[#064E3B]/30 border border-[#D1FAE5] dark:border-[#065F46] text-[#059669] dark:text-[#34D399] text-xs flex items-center space-x-3">
+                <Check className="w-4 h-4 shrink-0" />
+                <span>{tamperSuccess}</span>
+              </div>
+            )}
+
             {/* Certificate Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#E5E7EB] dark:border-[#1E382B]">
               <div>
@@ -145,10 +237,32 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
                 <p className="text-[11px] font-mono text-[#64748B] dark:text-[#94A3B8] mt-0.5 break-all">{result.battery_did}</p>
               </div>
 
-              <div className="text-left sm:text-right space-y-1">
-                <span className="inline-block px-3 py-1 rounded-full bg-[#ECFDF3] dark:bg-[#064E3B]/40 text-[#059669] dark:text-[#34D399] text-xs font-bold border border-[#D1FAE5] dark:border-[#065F46]">
-                  EU 2023/1542 Certified
-                </span>
+              <div className="text-left sm:text-right space-y-1.5">
+                {/* Physical Identity Verification Badge */}
+                <div>
+                  {physicalResult?.status === 'MATCHED' ? (
+                    <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#ECFDF3] dark:bg-[#064E3B]/50 text-[#059669] dark:text-[#34D399] text-xs font-bold border border-[#D1FAE5] dark:border-[#065F46]">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>{t.statusMatched}</span>
+                    </span>
+                  ) : physicalResult?.status === 'MISMATCH_FRAUD' ? (
+                    <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#FEE2E2] dark:bg-[#7F1D1D]/50 text-[#DC2626] dark:text-[#F87171] text-xs font-bold border border-[#FECACA] dark:border-[#991B1B] animate-pulse">
+                      <AlertOctagon className="w-3.5 h-3.5" />
+                      <span>{t.statusMismatchFraud}</span>
+                    </span>
+                  ) : physicalResult?.status === 'UNREGISTERED_SERIAL' ? (
+                    <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#FEF3C7] dark:bg-[#78350F]/50 text-[#D97706] dark:text-[#FBBF24] text-xs font-bold border border-[#FDE68A] dark:border-[#78350F]">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>{t.statusUnregistered}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#FEF3C7] dark:bg-[#78350F]/30 text-[#D97706] dark:text-[#FBBF24] text-xs font-bold border border-[#FDE68A] dark:border-[#78350F]/40">
+                      <Fingerprint className="w-3.5 h-3.5" />
+                      <span>{t.statusVerificationRequired}</span>
+                    </span>
+                  )}
+                </div>
+
                 <div className="text-[10px] text-[#64748B] dark:text-[#94A3B8] font-mono">
                   Verified At: {new Date(result.verification_timestamp).toLocaleString()}
                 </div>
@@ -206,6 +320,194 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
             </div>
           </div>
 
+          {/* DUAL-ID PHYSICAL IDENTITY VERIFICATION PANEL */}
+          <div className="bg-white dark:bg-[#121F17] rounded-3xl p-6 sm:p-8 border border-[#E5E7EB] dark:border-[#1E382B] space-y-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start space-x-3">
+                <div className="p-2.5 rounded-2xl bg-[#ECFDF3] dark:bg-[#064E3B]/40 text-[#059669] border border-[#D1FAE5] dark:border-[#065F46] shrink-0">
+                  <Fingerprint className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-[#14532D] dark:text-[#34D399]">
+                    {t.dualIdSectionTitle}
+                  </h3>
+                  <p className="text-xs text-[#64748B] dark:text-[#94A3B8] mt-0.5">
+                    {t.dualIdSectionSubtitle}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowTamperModal(true)}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#FEF2F2] dark:bg-[#7F1D1D]/30 border border-[#FEE2E2] dark:border-[#991B1B] text-[#DC2626] dark:text-[#F87171] text-xs font-bold hover:bg-[#FEE2E2] transition-colors shrink-0"
+              >
+                <Flag className="w-3.5 h-3.5" />
+                <span>{t.reportTamperTitle.split(' ')[0]} {t.reportTamperTitle.split(' ')[1]}</span>
+              </button>
+            </div>
+
+            {/* Anti-Fraud Disclaimer Notice */}
+            <div className="p-3.5 rounded-2xl bg-[#FFFBEB] dark:bg-[#78350F]/20 border border-[#FDE68A] dark:border-[#78350F]/40 flex items-start space-x-3 text-xs text-[#92400E] dark:text-[#FDE68A]">
+              <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0 text-[#D97706]" />
+              <p className="leading-relaxed">
+                <strong>Mandatory Anti-Fraud Policy:</strong> {t.qrOnlyDisclaimer}
+              </p>
+            </div>
+
+            {/* Input & Barcode Scanner Area */}
+            <div className="space-y-3">
+              <label className="block text-xs font-bold text-[#1F2937] dark:text-[#F1F5F9]">
+                {t.laserSerialLabel}
+              </label>
+
+              <div className="flex flex-col sm:flex-row items-stretch gap-2.5">
+                <div className="relative flex-1">
+                  <Barcode className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder={t.laserSerialPlaceholder}
+                    value={physicalSerial}
+                    onChange={e => setPhysicalSerial(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handlePhysicalVerify()}
+                    className="w-full bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B] rounded-xl pl-10 pr-3 py-2.5 text-xs text-[#1F2937] dark:text-[#F1F5F9] focus:outline-none focus:border-[#14532D] font-mono uppercase"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsCasingScannerOpen(true)}
+                  className="px-3.5 py-2.5 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] hover:bg-[#ECFDF3] dark:hover:bg-[#1E382B] text-[#14532D] dark:text-[#34D399] border border-[#E5E7EB] dark:border-[#1E382B] text-xs font-bold flex items-center justify-center space-x-2 transition-colors shrink-0"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>{t.scanBarcodeBtn}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handlePhysicalVerify()}
+                  disabled={physicalLoading}
+                  className="px-5 py-2.5 rounded-xl bg-[#14532D] hover:bg-[#166534] text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50 flex items-center justify-center space-x-2 shrink-0"
+                >
+                  <Fingerprint className="w-4 h-4" />
+                  <span>{physicalLoading ? t.loading : t.verifyPhysicalBtn}</span>
+                </button>
+              </div>
+
+              {/* Sample Helper Chips */}
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-[#64748B] dark:text-[#94A3B8]">
+                <span className="font-medium">Quick Test Scenarios:</span>
+                {result.serial_number && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhysicalSerial(result.serial_number!);
+                      handlePhysicalVerify(result.serial_number);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-[#ECFDF3] dark:bg-[#064E3B]/40 text-[#059669] dark:text-[#34D399] border border-[#D1FAE5] dark:border-[#065F46] font-mono text-[10px] font-bold hover:bg-[#D1FAE5] transition-colors"
+                  >
+                    ✓ {t.testMatchingSample} ({result.serial_number})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const swapped = result.battery_id.includes('NMC') ? 'NBS-2023-LFP-44109' : 'QV-2024-NMC-98124';
+                    setPhysicalSerial(swapped);
+                    handlePhysicalVerify(swapped);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-[#FEF2F2] dark:bg-[#7F1D1D]/30 text-[#DC2626] dark:text-[#F87171] border border-[#FEE2E2] dark:border-[#991B1B] font-mono text-[10px] font-bold hover:bg-[#FEE2E2] transition-colors"
+                >
+                  ⚠ {t.testSwapFraudSample}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fake = 'FAKE-ENGRAVED-SERIAL-999';
+                    setPhysicalSerial(fake);
+                    handlePhysicalVerify(fake);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-[#FFFBEB] dark:bg-[#78350F]/30 text-[#D97706] dark:text-[#FBBF24] border border-[#FDE68A] dark:border-[#78350F] font-mono text-[10px] font-bold hover:bg-[#FEF3C7] transition-colors"
+                >
+                  ✕ {t.testCounterfeitSample}
+                </button>
+              </div>
+            </div>
+
+            {/* Physical Error View */}
+            {physicalError && (
+              <div className="p-3.5 rounded-xl bg-[#FEE2E2] dark:bg-[#7F1D1D]/30 border border-[#FECACA] dark:border-[#991B1B] text-[#DC2626] dark:text-[#F87171] text-xs flex items-center space-x-2 font-medium">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{physicalError}</span>
+              </div>
+            )}
+
+            {/* PHYSICAL VERIFICATION OUTCOME CARD */}
+            {physicalResult && (
+              <div className={`p-5 rounded-2xl border transition-all ${
+                physicalResult.status === 'MATCHED'
+                  ? 'bg-[#ECFDF3] dark:bg-[#064E3B]/20 border-[#A7F3D0] dark:border-[#065F46]'
+                  : physicalResult.status === 'MISMATCH_FRAUD'
+                  ? 'bg-[#FEF2F2] dark:bg-[#7F1D1D]/20 border-[#FECACA] dark:border-[#991B1B]'
+                  : 'bg-[#FFFBEB] dark:bg-[#78350F]/20 border-[#FDE68A] dark:border-[#78350F]'
+              }`}>
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                  <div className="flex items-start space-x-3.5">
+                    {physicalResult.status === 'MATCHED' ? (
+                      <div className="p-2 rounded-xl bg-[#059669] text-white shrink-0 mt-0.5">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                    ) : physicalResult.status === 'MISMATCH_FRAUD' ? (
+                      <div className="p-2 rounded-xl bg-[#DC2626] text-white shrink-0 mt-0.5">
+                        <AlertOctagon className="w-5 h-5" />
+                      </div>
+                    ) : (
+                      <div className="p-2 rounded-xl bg-[#D97706] text-white shrink-0 mt-0.5">
+                        <AlertTriangle className="w-5 h-5" />
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <span className={`text-sm font-extrabold tracking-tight ${
+                          physicalResult.status === 'MATCHED'
+                            ? 'text-[#065F46] dark:text-[#34D399]'
+                            : physicalResult.status === 'MISMATCH_FRAUD'
+                            ? 'text-[#991B1B] dark:text-[#F87171]'
+                            : 'text-[#92400E] dark:text-[#FBBF24]'
+                        }`}>
+                          {physicalResult.status === 'MATCHED'
+                            ? t.statusMatched
+                            : physicalResult.status === 'MISMATCH_FRAUD'
+                            ? t.statusMismatchFraud
+                            : t.statusUnregistered}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-white/70 dark:bg-black/30 border border-current">
+                          {physicalResult.fraud_type || 'AUTHENTIC_SERIAL'}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-[#374151] dark:text-[#E2E8F0] leading-relaxed">
+                        {physicalResult.match_details}
+                      </p>
+
+                      {physicalResult.conflicting_battery_id && (
+                        <div className="mt-2 p-2.5 rounded-xl bg-white dark:bg-[#16261D] border border-[#FECACA] dark:border-[#991B1B] text-[11px] text-[#991B1B] dark:text-[#F87171] font-mono">
+                          Conflict Detected: Casing belongs to passport <strong>{physicalResult.conflicting_battery_id}</strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="text-left sm:text-right text-[11px] font-mono text-[#64748B] dark:text-[#94A3B8] shrink-0 space-y-0.5">
+                    <div>Verifier: <span className="font-bold">{physicalResult.verifier.role}</span></div>
+                    <div>Recorded: {new Date(physicalResult.verified_at).toLocaleTimeString()}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Anti-Counterfeiting & Physical Inspection Protocol Banner */}
           <div className="bg-[#FEF3C7]/40 dark:bg-[#78350F]/20 p-6 rounded-3xl border border-[#FDE68A] dark:border-[#78350F]/40 space-y-4 shadow-sm">
             <div className="flex items-start space-x-3">
@@ -255,6 +557,95 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Casing Barcode Scanner Modal */}
+      <QRScannerModal
+        isOpen={isCasingScannerOpen}
+        onClose={() => setIsCasingScannerOpen(false)}
+        title="Scan Laser Casing Barcode / Data Matrix"
+        allowAnyText={true}
+        onScanSuccess={(detectedCode) => {
+          setIsCasingScannerOpen(false);
+          setPhysicalSerial(detectedCode);
+          handlePhysicalVerify(detectedCode);
+        }}
+      />
+
+      {/* Report Tampering Modal */}
+      {showTamperModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs select-none">
+          <div className="bg-white dark:bg-[#121F17] border border-[#E5E7EB] dark:border-[#1E382B] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl relative text-[#1F2937] dark:text-[#F1F5F9]">
+            <button
+              onClick={() => setShowTamperModal(false)}
+              className="absolute top-4 right-4 p-2 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] text-[#64748B] hover:text-[#1F2937] dark:hover:text-white border border-[#E5E7EB] dark:border-[#1E382B]"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="text-center mb-5">
+              <div className="inline-flex p-3 rounded-2xl bg-[#FEF2F2] dark:bg-[#7F1D1D]/30 border border-[#FEE2E2] dark:border-[#991B1B] text-[#DC2626] mb-2">
+                <Flag className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <h3 className="text-lg font-bold text-[#14532D] dark:text-[#34D399]">
+                {t.reportTamperTitle}
+              </h3>
+              <p className="text-xs text-[#64748B] dark:text-[#94A3B8] mt-1">
+                {t.reportTamperDesc}
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmitTamperReport} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-[#1F2937] dark:text-[#F1F5F9]">
+                  {t.reportTamperReason}
+                </label>
+                <select
+                  value={tamperReason}
+                  onChange={(e: any) => setTamperReason(e.target.value)}
+                  className="w-full bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B] rounded-xl p-2.5 text-xs text-[#1F2937] dark:text-[#F1F5F9] focus:outline-none focus:border-[#14532D]"
+                >
+                  <option value="REPLACED_QR_STICKER">Replaced / Peeled QR Sticker</option>
+                  <option value="SCRATCHED_SERIAL">Scratched / Obscured Laser Engraving</option>
+                  <option value="MISMATCHED_CASING">Casing Mismatch / Cell Enclosure Opened</option>
+                  <option value="DAMAGED_SEAL">Damaged Tamper-Evident Security Seal</option>
+                  <option value="OTHER">Other Regulatory Suspicion</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-[#1F2937] dark:text-[#F1F5F9]">
+                  {t.reportTamperDetails}
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Describe the physical condition, location, or observed label alteration..."
+                  value={tamperDesc}
+                  onChange={e => setTamperDesc(e.target.value)}
+                  className="w-full bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B] rounded-xl p-2.5 text-xs text-[#1F2937] dark:text-[#F1F5F9] focus:outline-none focus:border-[#14532D]"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTamperModal(false)}
+                  className="px-4 py-2 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B] text-xs font-semibold text-[#64748B]"
+                >
+                  {t.close}
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingTamper}
+                  className="px-5 py-2 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+                >
+                  {submittingTamper ? t.loading : t.submitTamperReport}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

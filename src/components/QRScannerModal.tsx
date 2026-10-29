@@ -17,9 +17,17 @@ interface QRScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onScanSuccess: (batteryId: string) => void;
+  title?: string;
+  allowAnyText?: boolean;
 }
 
-export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose, onScanSuccess }) => {
+export const QRScannerModal: React.FC<QRScannerModalProps> = ({
+  isOpen,
+  onClose,
+  onScanSuccess,
+  title,
+  allowAnyText = false,
+}) => {
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'camera' | 'upload'>('camera');
   const [cameraActive, setCameraActive] = useState<boolean>(false);
@@ -33,10 +41,13 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
-  // Helper to extract clean Battery ID from URL or text
+  // Helper to extract clean Battery ID or Serial from URL or text
   const extractBatteryId = (rawText: string): string | null => {
     if (!rawText) return null;
     const trimmed = rawText.trim();
+    if (allowAnyText) {
+      return trimmed;
+    }
     // 1. Direct match: BAT-XXX-XXXXXXXX
     const directMatch = trimmed.match(/BAT-[A-Z0-9]+-[A-F0-9]+/i);
     if (directMatch) return directMatch[0].toUpperCase();
@@ -60,7 +71,9 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
     // 1. Try Native BarcodeDetector if available in browser
     if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
       try {
-        const barcodeDetector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+        const barcodeDetector = new (window as any).BarcodeDetector({
+          formats: ['qr_code', 'data_matrix', 'code_128', 'code_39', 'ean_13'],
+        });
         const canvas = document.createElement('canvas');
         canvas.width = imageData.width;
         canvas.height = imageData.height;
@@ -281,7 +294,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose,
           <div className="inline-flex p-3 rounded-2xl bg-[#ECFDF3] dark:bg-[#064E3B]/30 border border-[#D1FAE5] dark:border-[#065F46] text-[#059669] mb-2 shadow-xs">
             <Camera className="w-6 h-6 stroke-[2.2]" />
           </div>
-          <h3 className="text-xl font-bold text-[#14532D] dark:text-[#34D399]">{t.scannerTitle}</h3>
+          <h3 className="text-xl font-bold text-[#14532D] dark:text-[#34D399]">{title || t.scannerTitle}</h3>
           <p className="text-xs text-[#64748B] dark:text-[#94A3B8] mt-1">{t.scannerSubtitle}</p>
         </div>
 

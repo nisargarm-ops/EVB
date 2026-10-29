@@ -183,10 +183,80 @@ export interface AuditVerification {
   verified_at: string;
 }
 
+export type DualIdVerificationStatus =
+  | 'MATCHED'
+  | 'MISMATCH_FRAUD'
+  | 'UNREGISTERED_SERIAL'
+  | 'PENDING_INSPECTION';
+
+export interface PhysicalVerificationRequest {
+  physical_serial: string;
+  inspector_notes?: string;
+  barcode_type?: 'LASER_ETCHED' | 'DATA_MATRIX' | 'BARCODE_1D' | 'MANUAL';
+  device_info?: string;
+}
+
+export interface PhysicalVerificationResponse {
+  status: 'MATCHED' | 'MISMATCH_FRAUD' | 'UNREGISTERED_SERIAL';
+  is_authentic: boolean;
+  battery_id: string;
+  battery_did: string;
+  registered_serial_number: string;
+  physical_serial_entered: string;
+  manufacturer_name: string;
+  model_designation: string;
+  match_details: string;
+  fraud_detected: boolean;
+  fraud_type?: 'QR_STICKER_SWAP_DETECTED' | 'UNREGISTERED_PHYSICAL_CASING' | null;
+  conflicting_battery_id?: string | null;
+  suspicious_repeated_scans: boolean;
+  recent_scan_count_15m: number;
+  verified_at: string;
+  verifier: {
+    id?: string;
+    role: string;
+    organization?: string;
+  };
+  tamper_report_count: number;
+}
+
+export interface TamperReportRequest {
+  reason: 'REPLACED_QR_STICKER' | 'SCRATCHED_SERIAL' | 'MISMATCHED_CASING' | 'DAMAGED_SEAL' | 'OTHER';
+  description: string;
+  reported_serial?: string;
+}
+
+export interface TamperReportResponse {
+  success: boolean;
+  report_id: string;
+  battery_id: string;
+  status: string;
+  message: string;
+  timestamp: string;
+}
+
+export interface FraudAuditStatus {
+  battery_id: string;
+  battery_did: string;
+  registered_serial_number: string;
+  total_physical_verifications: number;
+  matched_count: number;
+  fraud_alerts_count: number;
+  tamper_reports_count: number;
+  recent_scan_count_15m: number;
+  suspicious_repeated_scans: boolean;
+  last_physical_verification?: {
+    status: string;
+    verified_at: string;
+    verifier_role: string;
+  } | null;
+}
+
 export interface PublicVerification {
   is_authentic: boolean;
   battery_id: string;
   battery_did: string;
+  serial_number?: string;
   manufacturer_name: string;
   model_designation: string;
   chemistry: string;
@@ -198,6 +268,11 @@ export interface PublicVerification {
   total_custody_events: number;
   is_audit_chain_valid: boolean;
   verification_timestamp: string;
+  physical_verification_status?: DualIdVerificationStatus;
+  fraud_alert_count?: number;
+  tamper_report_count?: number;
+  recent_scan_count_15m?: number;
+  suspicious_repeated_scans?: boolean;
 }
 
 export interface QpiAIOptResponse {

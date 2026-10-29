@@ -6,6 +6,11 @@ import {
   DispositionDecision,
   AuditVerification,
   PublicVerification,
+  PhysicalVerificationRequest,
+  PhysicalVerificationResponse,
+  TamperReportRequest,
+  TamperReportResponse,
+  FraudAuditStatus,
   QpiAIOptResponse,
   QpiAIQuantumResponse,
   UserRole,
@@ -785,6 +790,47 @@ export const api = {
       return backendFetch<PublicVerification>(`/verify/${encodeURIComponent(batteryId)}`);
     }
     return batteryRepository.verifyPublic(batteryId);
+  },
+
+  async verifyPhysicalIdentity(
+    batteryId: string,
+    payload: PhysicalVerificationRequest
+  ): Promise<PhysicalVerificationResponse> {
+    if (isBrowserRuntime) {
+      return backendFetch<PhysicalVerificationResponse>(
+        `/verify/${encodeURIComponent(batteryId)}/physical`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      );
+    }
+    return batteryRepository.verifyPhysicalIdentity(batteryId, payload);
+  },
+
+  async reportTampering(
+    batteryId: string,
+    payload: TamperReportRequest
+  ): Promise<TamperReportResponse> {
+    if (isBrowserRuntime) {
+      return backendFetch<TamperReportResponse>(
+        `/verify/${encodeURIComponent(batteryId)}/report-tamper`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      );
+    }
+    return batteryRepository.reportTampering(batteryId, payload);
+  },
+
+  async getFraudStatus(batteryId: string): Promise<FraudAuditStatus> {
+    if (isBrowserRuntime) {
+      return backendFetch<FraudAuditStatus>(
+        `/verify/${encodeURIComponent(batteryId)}/fraud-status`
+      );
+    }
+    return batteryRepository.getFraudStatus(batteryId);
   },
 
   async verifyAuditTrail(batteryId: string): Promise<AuditVerification> {

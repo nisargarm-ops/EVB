@@ -13,6 +13,11 @@ import type {
   Organization,
   PassportSummary,
   PublicVerification,
+  PhysicalVerificationRequest,
+  PhysicalVerificationResponse,
+  TamperReportRequest,
+  TamperReportResponse,
+  FraudAuditStatus,
   UserRole,
 } from '../types/index.ts';
 import {
@@ -2159,12 +2164,14 @@ export class SupabaseBackendRepository {
     }
     const passport = await this.getPassport(idOrDid);
     const audit = await this.verifyAuditTrail(passport.battery_id);
+    const fraudStatus = await this.getFraudStatus(passport.battery_id).catch(() => null);
 
     // Strictly whitelist public EU 2023/1542 fields — redact VIN, raw telemetry, and internal notes
     return {
       is_authentic: true,
       battery_id: passport.battery_id,
       battery_did: passport.battery_did,
+      serial_number: passport.serial_number,
       manufacturer_name: passport.manufacturer_name,
       model_designation: passport.model_designation,
       chemistry: passport.chemistry,
@@ -2176,6 +2183,304 @@ export class SupabaseBackendRepository {
       total_custody_events: audit.total_events,
       is_audit_chain_valid: audit.is_valid,
       verification_timestamp: new Date().toISOString(),
+      physical_verification_status: fraudStatus?.last_physical_verification
+        ? (fraudStatus.last_physical_verification.status as any)
+        : 'PENDING_INSPECTION',
+      tamper_report_count: fraudStatus?.tamper_reports_count || 0,
+      recent_scan_count_15m: fraudStatus?.recent_scan_count_15m || 0,
+      suspicious_repeated_scans: fraudStatus?.suspicious_repeated_scans || false,
+    };
+  }
+
+  async verifyPhysicalIdentity(
+    batteryIdOrDid: string,
+    payload: PhysicalVerificationRequest,
+    actor?: AuthenticatedActor | null,
+    clientIp?: string
+  ): Promise<PhysicalVerificationResponse> {
+    if (!this.isConfigured()) {
+      return batteryRepository.verifyPhysicalIdentity(
+        batteryIdOrDid,
+        payload,
+        actor ? actorToProfile(actor) : null,
+        clientIp
+      );
+    }
+
+    const row = await this.findRawBatteryRow(batteryIdOrDid);
+    if (!row) {
+      throw new DomainError(`Battery passport '${batteryIdOrDid}' not found.`, 404);
+    }
+
+    const passport = await this.getPassport(row.battery_id);
+    const db = this.getAdminClient();
+
+    const cleanEntered = String(payload.physical_serial || '').trim().toUpperCase();
+    const cleanRegistered = String(row.serial_number || '').trim().toUpperCase();
+
+    // 15-minute velocity check on verification_results
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const { data: recentAttempts } = await db
+      .from('verification_results')
+      .select('id, verified_at')
+      .eq('battery_id', row.id)
+      .gte('verified_at', fifteenMinutesAgo);
+
+    const recentCount = (recentAttempts?.length || 0) + 1;
+    const suspiciousRepeatedScans = recentCount >= 5;
+
+    // Tamper report count from audit_logs
+    const { data: tamperLogs } = await db
+      .from('audit_logs')
+      .select('id')
+      .eq('entity_type', 'BATTERY')
+      .eq('entity_id', row.battery_id)
+      .eq('action', 'TAMPER_ALERT_REPORTED');
+
+    const tamperCount = tamperLogs?.length || 0;
+
+    let status: PhysicalVerificationResponse['status'] = 'MATCHED';
+    let isAuthentic = true;
+    let fraudDetected = false;
+    let fraudType: PhysicalVerificationResponse['fraud_type'] = null;
+    let conflictingBatteryId: string | null = null;
+    let matchDetails = '';
+
+    if (cleanEntered === cleanRegistered && cleanEntered.length > 0) {
+      status = 'MATCHED';
+      isAuthentic = true;
+      fraudDetected = false;
+      matchDetails = `Identity Matched: Permanent laser-engraved casing serial '${row.serial_number}' strictly matches registered passport '${row.battery_id}'.`;
+    } else {
+      // Check if serial belongs to any other battery (QR Sticker Swap detection)
+      const { data: otherBattery } = await db
+        .from('batteries')
+        .select('id, battery_id, serial_number')
+        .ilike('serial_number', cleanEntered)
+        .neq('id', row.id)
+        .maybeSingle();
+
+      if (otherBattery) {
+        status = 'MISMATCH_FRAUD';
+        isAuthentic = false;
+        fraudDetected = true;
+        fraudType = 'QR_STICKER_SWAP_DETECTED';
+        conflictingBatteryId = otherBattery.battery_id;
+        matchDetails = `CRITICAL FRAUD ALERT: Physical casing serial '${payload.physical_serial}' belongs to a different battery passport (${otherBattery.battery_id}). This indicates a counterfeit or swapped QR label affixed to a different physical pack.`;
+      } else {
+        status = 'UNREGISTERED_SERIAL';
+        isAuthentic = false;
+        fraudDetected = true;
+        fraudType = 'UNREGISTERED_PHYSICAL_CASING';
+        matchDetails = `Identity Mismatch: Serial '${payload.physical_serial}' does not match registered passport serial and does not exist in the official manufacturer database.`;
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    let profileUuid: string | null = null;
+    if (actor) {
+      try {
+        profileUuid = await this.resolveValidProfileUuid(actor);
+      } catch {
+        profileUuid = null;
+      }
+    }
+
+    // Persist into verification_results
+    try {
+      await db.from('verification_results').insert({
+        battery_id: row.id,
+        verified_by: profileUuid,
+        verifier_role: actor?.role || 'PUBLIC',
+        check_type: 'DUAL_ID_PHYSICAL_VERIFICATION',
+        is_authentic: isAuthentic,
+        is_chain_valid: true,
+        total_blocks_checked: 1,
+        error_details: isAuthentic ? null : matchDetails,
+        metadata: {
+          physical_serial_entered: payload.physical_serial,
+          registered_serial: row.serial_number,
+          match_status: status,
+          fraud_detected: fraudDetected,
+          fraud_type: fraudType,
+          conflicting_battery_id: conflictingBatteryId,
+          suspicious_repeated_scans: suspiciousRepeatedScans,
+          client_ip: clientIp || null,
+          inspector_notes: payload.inspector_notes || null,
+          barcode_type: payload.barcode_type || 'MANUAL',
+        },
+        verified_at: nowIso,
+      });
+    } catch (e) {
+      console.warn('Non-fatal: could not write verification_results row', e);
+    }
+
+    // Append security audit log
+    try {
+      await db.from('audit_logs').insert({
+        action: status === 'MATCHED' ? 'DUAL_ID_VERIFIED_SUCCESS' : 'DUAL_ID_VERIFIED_FRAUD_ALERT',
+        entity_type: 'BATTERY',
+        entity_id: row.battery_id,
+        actor_id: profileUuid,
+        actor_role: actor?.role || 'PUBLIC',
+        actor_ip: clientIp || null,
+        details: {
+          status,
+          fraud_detected: fraudDetected,
+          entered_serial: cleanEntered,
+          registered_serial: row.serial_number,
+          conflicting_battery_id: conflictingBatteryId,
+          suspicious_repeated_scans: suspiciousRepeatedScans,
+          inspector_notes: payload.inspector_notes || null,
+        },
+        timestamp: nowIso,
+      });
+    } catch (e) {
+      console.warn('Non-fatal: could not write audit_logs row', e);
+    }
+
+    return {
+      status,
+      is_authentic: isAuthentic,
+      battery_id: row.battery_id,
+      battery_did: row.battery_did,
+      registered_serial_number: row.serial_number,
+      physical_serial_entered: payload.physical_serial,
+      manufacturer_name: passport.manufacturer_name,
+      model_designation: passport.model_designation,
+      match_details: matchDetails,
+      fraud_detected: fraudDetected,
+      fraud_type: fraudType,
+      conflicting_battery_id: conflictingBatteryId,
+      suspicious_repeated_scans: suspiciousRepeatedScans,
+      recent_scan_count_15m: recentCount,
+      verified_at: nowIso,
+      verifier: {
+        id: actor?.id,
+        role: actor?.role || 'PUBLIC',
+        organization: actor?.organization_name,
+      },
+      tamper_report_count: tamperCount,
+    };
+  }
+
+  async reportTampering(
+    batteryIdOrDid: string,
+    payload: TamperReportRequest,
+    actor?: AuthenticatedActor | null,
+    clientIp?: string
+  ): Promise<TamperReportResponse> {
+    if (!this.isConfigured()) {
+      return batteryRepository.reportTampering(
+        batteryIdOrDid,
+        payload,
+        actor ? actorToProfile(actor) : null,
+        clientIp
+      );
+    }
+
+    const row = await this.findRawBatteryRow(batteryIdOrDid);
+    if (!row) {
+      throw new DomainError(`Battery passport '${batteryIdOrDid}' not found.`, 404);
+    }
+
+    const db = this.getAdminClient();
+    const nowIso = new Date().toISOString();
+    const reportId = 'TR-' + crypto.randomUUID().slice(0, 8).toUpperCase();
+
+    let profileUuid: string | null = null;
+    if (actor) {
+      try {
+        profileUuid = await this.resolveValidProfileUuid(actor);
+      } catch {
+        profileUuid = null;
+      }
+    }
+
+    try {
+      await db.from('audit_logs').insert({
+        action: 'TAMPER_ALERT_REPORTED',
+        entity_type: 'BATTERY',
+        entity_id: row.battery_id,
+        actor_id: profileUuid,
+        actor_role: actor?.role || 'PUBLIC',
+        actor_ip: clientIp || null,
+        details: {
+          report_id: reportId,
+          reason: payload.reason,
+          description: payload.description,
+          reported_serial: payload.reported_serial || null,
+        },
+        timestamp: nowIso,
+      });
+    } catch (e) {
+      console.warn('Non-fatal: could not log tamper incident to audit_logs', e);
+    }
+
+    return {
+      success: true,
+      report_id: reportId,
+      battery_id: row.battery_id,
+      status: 'INVESTIGATION_PENDING',
+      message: `Tamper incident '${payload.reason}' reported and logged onto immutable security audit trail.`,
+      timestamp: nowIso,
+    };
+  }
+
+  async getFraudStatus(batteryIdOrDid: string): Promise<FraudAuditStatus> {
+    if (!this.isConfigured()) {
+      return batteryRepository.getFraudStatus(batteryIdOrDid);
+    }
+
+    const row = await this.findRawBatteryRow(batteryIdOrDid);
+    if (!row) {
+      throw new DomainError(`Battery passport '${batteryIdOrDid}' not found.`, 404);
+    }
+
+    const db = this.getAdminClient();
+
+    // Query physical verifications
+    const { data: verifications } = await db
+      .from('verification_results')
+      .select('*')
+      .eq('battery_id', row.id)
+      .eq('check_type', 'DUAL_ID_PHYSICAL_VERIFICATION')
+      .order('verified_at', { ascending: true });
+
+    const list = verifications || [];
+    const matchedCount = list.filter(v => v.is_authentic).length;
+    const fraudAlertsCount = list.filter(v => !v.is_authentic).length;
+
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const recentScans = list.filter(v => v.verified_at >= fifteenMinutesAgo);
+
+    // Tamper logs count
+    const { count: tamperCount } = await db
+      .from('audit_logs')
+      .select('*', { count: 'exact', head: true })
+      .eq('entity_type', 'BATTERY')
+      .eq('entity_id', row.battery_id)
+      .eq('action', 'TAMPER_ALERT_REPORTED');
+
+    const last = list.length > 0 ? list[list.length - 1] : null;
+
+    return {
+      battery_id: row.battery_id,
+      battery_did: row.battery_did,
+      registered_serial_number: row.serial_number,
+      total_physical_verifications: list.length,
+      matched_count: matchedCount,
+      fraud_alerts_count: fraudAlertsCount,
+      tamper_reports_count: tamperCount || 0,
+      recent_scan_count_15m: recentScans.length,
+      suspicious_repeated_scans: recentScans.length >= 5,
+      last_physical_verification: last
+        ? {
+            status: last.is_authentic ? 'MATCHED' : ((last.metadata as any)?.match_status || 'MISMATCH_FRAUD'),
+            verified_at: toIsoUtc(last.verified_at),
+            verifier_role: last.verifier_role,
+          }
+        : null,
     };
   }
 

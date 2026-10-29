@@ -432,6 +432,68 @@ async function startServer() {
     }
   });
 
+  // Dual-ID Physical Identity Cross-Verification
+  apiRouter.post(
+    '/verify/:batteryId/physical',
+    auth.optionalAuth,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { physical_serial, inspector_notes, barcode_type, device_info } = req.body || {};
+        if (!physical_serial || typeof physical_serial !== 'string' || !physical_serial.trim()) {
+          res.status(400).json({ detail: 'Physical casing serial number is required for cross-verification.' });
+          return;
+        }
+
+        const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+        const outcome = await supabaseBackendRepo.verifyPhysicalIdentity(
+          String(req.params.batteryId),
+          { physical_serial: physical_serial.trim(), inspector_notes, barcode_type, device_info },
+          req.actor || null,
+          clientIp
+        );
+        res.json(outcome);
+      } catch (err) {
+        sendError(res, err, 'Failed to perform physical identity verification');
+      }
+    }
+  );
+
+  // Anti-Fraud: Report Suspected QR Tampering or Replacement
+  apiRouter.post(
+    '/verify/:batteryId/report-tamper',
+    auth.optionalAuth,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { reason, description, reported_serial } = req.body || {};
+        if (!reason || !description) {
+          res.status(400).json({ detail: 'Reason and description are required to report suspected tampering.' });
+          return;
+        }
+
+        const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+        const report = await supabaseBackendRepo.reportTampering(
+          String(req.params.batteryId),
+          { reason, description, reported_serial },
+          req.actor || null,
+          clientIp
+        );
+        res.status(201).json(report);
+      } catch (err) {
+        sendError(res, err, 'Failed to submit tamper incident report');
+      }
+    }
+  );
+
+  // Anti-Fraud: Battery Fraud and Velocity Audit Status
+  apiRouter.get('/verify/:batteryId/fraud-status', async (req: Request, res: Response) => {
+    try {
+      const status = await supabaseBackendRepo.getFraudStatus(String(req.params.batteryId));
+      res.json(status);
+    } catch (err) {
+      sendError(res, err, 'Failed to retrieve battery anti-fraud status');
+    }
+  });
+
   // Disposition Decisions
   apiRouter.get('/decisions/:batteryId', async (req: Request, res: Response) => {
     try {
@@ -657,7 +719,7 @@ async function startServer() {
       app.use(vite.middlewares);
 
       // Handle SPA index.html serving for non-API requests in dev mode
-      app.use('*', async (req: Request, res: Response, next: NextFunction) => {
+      app.use(async (req: Request, res: Response, next: NextFunction) => {
         const url = req.originalUrl;
         if (url.startsWith('/api')) return next();
         try {

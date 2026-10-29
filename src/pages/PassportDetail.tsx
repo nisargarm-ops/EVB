@@ -8,9 +8,13 @@ import {
   AlertCircle, 
   Truck, 
   CheckCircle2, 
-  Sparkles 
+  Sparkles,
+  Barcode,
+  Fingerprint,
+  ShieldCheck,
+  ShieldAlert
 } from 'lucide-react';
-import { BatteryPassport, CustodyEvent, UserRole, DispositionDecision, Organization } from '../types';
+import { BatteryPassport, CustodyEvent, UserRole, DispositionDecision, Organization, FraudAuditStatus } from '../types';
 import { api } from '../services/api';
 import { HashChainInspector } from '../components/HashChainInspector';
 import { CustodyTimeline } from '../components/CustodyTimeline';
@@ -31,6 +35,7 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
   const [passport, setPassport] = useState<BatteryPassport | null>(null);
   const [events, setEvents] = useState<CustodyEvent[]>([]);
   const [disposition, setDisposition] = useState<DispositionDecision | null>(null);
+  const [fraudStatus, setFraudStatus] = useState<FraudAuditStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -63,15 +68,17 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
       setNewCycles(p.health_state.cycle_count);
       setNewResistance(p.health_state.internal_resistance_mohm);
 
-      const [evts, disp, orgs] = await Promise.all([
+      const [evts, disp, orgs, fraud] = await Promise.all([
         api.getCustodyEvents(batteryId),
         api.getDispositionDecision(batteryId),
         Promise.resolve(api.listOrganizations()),
+        api.getFraudStatus(batteryId).catch(() => null),
       ]);
 
       setEvents(evts);
       setDisposition(disp);
       setOrganizations(orgs);
+      setFraudStatus(fraud);
       if (orgs.length > 0 && !transferTargetOrg) {
         setTransferTargetOrg(orgs[1]?.id || orgs[0].id);
       }
@@ -180,10 +187,14 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-extrabold text-[#14532D] tracking-tight">{passport.battery_id}</h1>
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[#ECFDF3] text-[#059669] border border-[#D1FAE5]">
                 {passport.status.replace(/_/g, ' ')}
+              </span>
+              <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-[#F8FAF7] text-[#14532D] border border-[#E5E7EB] inline-flex items-center space-x-1">
+                <Barcode className="w-3.5 h-3.5 text-[#059669]" />
+                <span>SN: {passport.serial_number}</span>
               </span>
             </div>
             <p className="text-xs text-[#64748B] font-mono mt-0.5">{passport.battery_did}</p>
@@ -369,6 +380,10 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
 
           <div className="space-y-2.5 text-xs">
             <div className="flex justify-between py-1.5 border-b border-[#E5E7EB]">
+              <span className="text-[#64748B]">Laser Casing Serial:</span>
+              <span className="font-mono font-bold text-[#14532D]">{passport.serial_number}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-[#E5E7EB]">
               <span className="text-[#64748B]">Chemistry:</span>
               <span className="font-semibold text-[#14532D]">{passport.chemistry}</span>
             </div>
@@ -524,6 +539,61 @@ export const PassportDetail: React.FC<PassportDetailProps> = ({
           </div>
         </div>
       )}
+
+      {/* Dual-ID Physical Identity & Anti-Fraud Card */}
+      <div className="bg-white p-6 rounded-2xl border border-[#E5E7EB] space-y-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 rounded-xl bg-[#ECFDF3] text-[#059669] border border-[#D1FAE5]">
+              <Fingerprint className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-[#14532D]">Dual-ID Anti-Fraud & Physical Verification</h3>
+              <p className="text-xs text-[#64748B]">
+                Cryptographic passport ({passport.battery_id}) bound to laser-etched casing serial ({passport.serial_number})
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            {fraudStatus?.last_physical_verification?.status === 'MATCHED' ? (
+              <span className="px-3 py-1 rounded-full bg-[#ECFDF3] text-[#059669] text-xs font-bold border border-[#D1FAE5] inline-flex items-center space-x-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Identity Matched</span>
+              </span>
+            ) : fraudStatus?.fraud_alerts_count ? (
+              <span className="px-3 py-1 rounded-full bg-[#FEE2E2] text-[#DC2626] text-xs font-bold border border-[#FECACA] inline-flex items-center space-x-1">
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>Fraud Alert Recorded</span>
+              </span>
+            ) : (
+              <span className="px-3 py-1 rounded-full bg-[#FEF3C7] text-[#D97706] text-xs font-bold border border-[#FDE68A] inline-flex items-center space-x-1">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Physical Inspection Required</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-2">
+          <div className="p-3 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB]">
+            <div className="text-[11px] text-[#64748B]">Laser Engraved SN</div>
+            <div className="font-mono font-bold text-[#14532D] mt-0.5">{passport.serial_number}</div>
+          </div>
+          <div className="p-3 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB]">
+            <div className="text-[11px] text-[#64748B]">Physical Checks</div>
+            <div className="font-mono font-bold text-[#1F2937] mt-0.5">{fraudStatus?.total_physical_verifications || 0} checks</div>
+          </div>
+          <div className="p-3 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB]">
+            <div className="text-[11px] text-[#64748B]">Tamper Incidents</div>
+            <div className="font-mono font-bold text-[#DC2626] mt-0.5">{fraudStatus?.tamper_reports_count || 0} reports</div>
+          </div>
+          <div className="p-3 rounded-xl bg-[#F8FAF7] border border-[#E5E7EB]">
+            <div className="text-[11px] text-[#64748B]">Scan Velocity (15m)</div>
+            <div className="font-mono font-bold text-[#1F2937] mt-0.5">{fraudStatus?.recent_scan_count_15m || 0} scans</div>
+          </div>
+        </div>
+      </div>
 
       {/* Cryptographic Tamper-Evident Hash Chain Inspector */}
       <HashChainInspector batteryId={passport.battery_id} events={events} />
