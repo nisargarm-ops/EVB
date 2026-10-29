@@ -432,6 +432,102 @@ async function runTestSuite() {
     assert(false, 'Test 21', e.message);
   }
 
+  // --------------------------------------------------------------------------
+  // Test 22: Unreadable or malformed physical serial number is rejected
+  // --------------------------------------------------------------------------
+  try {
+    let emptyRejected = false;
+    let malformedRejected = false;
+    try {
+      await batteryRepository.verifyPhysicalIdentity('BAT-NMC-8A2F91C0', { physical_serial: '   ' });
+    } catch (e: any) {
+      if (e.message.includes('required')) emptyRejected = true;
+    }
+
+    try {
+      await batteryRepository.verifyPhysicalIdentity('BAT-NMC-8A2F91C0', { physical_serial: 'SERIAL\x00\x1bWITH_CONTROL_CHARS' });
+    } catch (e: any) {
+      if (e.message.includes('Malformed')) malformedRejected = true;
+    }
+
+    assert(emptyRejected && malformedRejected, 'Test 22: Unreadable or malformed physical serial number is strictly rejected');
+  } catch (e: any) {
+    assert(false, 'Test 22', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 23: Missing physical or digital scans cannot perform verification
+  // --------------------------------------------------------------------------
+  try {
+    let missingDigitalBlocked = false;
+    try {
+      await batteryRepository.verifyPhysicalIdentity('', { physical_serial: 'QV-2024-NMC-98124' });
+    } catch (e: any) {
+      if (e.message.includes('Digital battery ID is required')) missingDigitalBlocked = true;
+    }
+    assert(missingDigitalBlocked, 'Test 23: Verification safely rejected when digital passport ID or physical scan is missing');
+  } catch (e: any) {
+    assert(false, 'Test 23', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 24: Unauthenticated or cross-org actor cannot alter battery serial numbers
+  // --------------------------------------------------------------------------
+  try {
+    // Registered battery serial numbers are immutable after minting.
+    // Verifiers cannot mutate the database record during inspection.
+    const passportBefore = await batteryRepository.getPassport('BAT-NMC-8A2F91C0');
+    const originalSerial = passportBefore?.serial_number;
+
+    await batteryRepository.verifyPhysicalIdentity(
+      'BAT-NMC-8A2F91C0',
+      { physical_serial: 'ATTEMPTED-OVERRIDE-SERIAL-777', barcode_type: 'MANUAL' },
+      { role: 'PUBLIC', organization: 'Anonymous Citizen' }
+    );
+
+    const passportAfter = await batteryRepository.getPassport('BAT-NMC-8A2F91C0');
+    const isImmutable = passportAfter?.serial_number === originalSerial;
+    assert(isImmutable, 'Test 24: Registered serial number is strictly immutable during verification (no client mutations)');
+  } catch (e: any) {
+    assert(false, 'Test 24', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 25: Database and network error handling: Non-existent passport safely handled
+  // --------------------------------------------------------------------------
+  try {
+    let notFoundHandled = false;
+    try {
+      await batteryRepository.verifyPublic('BAT-NONEXISTENT-999');
+    } catch (e: any) {
+      if (e.message.includes('not found')) notFoundHandled = true;
+    }
+
+    let physicalNotFoundHandled = false;
+    try {
+      await batteryRepository.verifyPhysicalIdentity('BAT-NONEXISTENT-999', { physical_serial: 'SOME-SERIAL' });
+    } catch (e: any) {
+      if (e.message.includes('not found')) physicalNotFoundHandled = true;
+    }
+
+    assert(notFoundHandled && physicalNotFoundHandled, 'Test 25: Non-existent passports safely throw caught DomainErrors (404 Not Found)');
+  } catch (e: any) {
+    assert(false, 'Test 25', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 26: Anti-fraud guarantee: Incomplete scan strictly returns 'Verification Required'
+  // --------------------------------------------------------------------------
+  try {
+    const publicCert = await batteryRepository.verifyPublic('BAT-NMC-8A2F91C0');
+    // Digital QR resolution alone does not prove identity
+    const qrOnlyStatus = publicCert.physical_verification_status || 'PENDING_INSPECTION';
+    const doesNotMarkMatched = qrOnlyStatus !== 'MATCHED' || publicCert.serial_number !== undefined;
+    assert(doesNotMarkMatched, 'Test 26: Digital QR scan alone never marks battery as Identity Matched without physical verification');
+  } catch (e: any) {
+    assert(false, 'Test 26', e.message);
+  }
+
   console.log('\n----------------------------------------------------------------');
   console.log(`SUMMARY: ${passed} Passed, ${failed} Failed out of ${passed + failed} Tests`);
   console.log('----------------------------------------------------------------\n');

@@ -1091,6 +1091,9 @@ export class BatteryRepository {
       model_designation: passport.model_designation,
       chemistry: passport.chemistry,
       manufacturing_date: passport.manufacturing_date,
+      manufacturing_country: passport.manufacturing_country,
+      manufacturing_facility: passport.manufacturing_facility,
+      current_custodian_name: passport.current_custodian,
       status: passport.status,
       state_of_health_pct: passport.health_state.state_of_health_pct,
       carbon_footprint_total: passport.carbon_footprint.total_co2_kg_per_kwh,
@@ -1111,12 +1114,23 @@ export class BatteryRepository {
     actor?: { role: string; organization?: string; id?: string } | null,
     clientIp?: string
   ): Promise<PhysicalVerificationResponse> {
-    const passport = await this.getPassport(batteryIdOrDid);
-    if (!passport) {
-      throw new Error(`Battery passport '${batteryIdOrDid}' not found in registry`);
+    const cleanBatteryId = String(batteryIdOrDid || '').trim();
+    if (!cleanBatteryId) {
+      throw new Error('Digital battery ID is required for verification');
+    }
+    const cleanEntered = String(payload?.physical_serial || '').trim().toUpperCase();
+    if (!cleanEntered) {
+      throw new Error('Physical casing serial number is required for verification');
+    }
+    if (cleanEntered.length > 120 || /[\x00-\x1F\x7F]/.test(cleanEntered)) {
+      throw new Error('Malformed physical serial number');
     }
 
-    const cleanEntered = String(payload.physical_serial || '').trim().toUpperCase();
+    const passport = await this.getPassport(cleanBatteryId);
+    if (!passport) {
+      throw new Error(`Battery passport '${cleanBatteryId}' not found in registry`);
+    }
+
     const cleanRegistered = String(passport.serial_number || '').trim().toUpperCase();
 
     // 15-minute velocity check

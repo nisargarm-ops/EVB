@@ -438,16 +438,28 @@ async function startServer() {
     auth.optionalAuth,
     async (req: AuthRequest, res: Response) => {
       try {
+        const rawBatteryId = String(req.params.batteryId || '').trim();
+        if (!rawBatteryId || rawBatteryId === 'undefined' || rawBatteryId === 'null') {
+          res.status(400).json({ detail: 'Digital Battery ID or DID parameter is required for identity verification.' });
+          return;
+        }
+
         const { physical_serial, inspector_notes, barcode_type, device_info } = req.body || {};
         if (!physical_serial || typeof physical_serial !== 'string' || !physical_serial.trim()) {
           res.status(400).json({ detail: 'Physical casing serial number is required for cross-verification.' });
           return;
         }
 
+        const cleanSerial = physical_serial.trim();
+        if (cleanSerial.length > 120 || /[\x00-\x1F\x7F]/.test(cleanSerial)) {
+          res.status(400).json({ detail: 'Malformed physical serial number. Must not contain control characters and must not exceed 120 characters.' });
+          return;
+        }
+
         const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
         const outcome = await supabaseBackendRepo.verifyPhysicalIdentity(
-          String(req.params.batteryId),
-          { physical_serial: physical_serial.trim(), inspector_notes, barcode_type, device_info },
+          rawBatteryId,
+          { physical_serial: cleanSerial, inspector_notes, barcode_type, device_info },
           req.actor || null,
           clientIp
         );

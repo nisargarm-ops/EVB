@@ -2176,6 +2176,9 @@ export class SupabaseBackendRepository {
       model_designation: passport.model_designation,
       chemistry: passport.chemistry,
       manufacturing_date: passport.manufacturing_date,
+      manufacturing_country: passport.manufacturing_country,
+      manufacturing_facility: passport.manufacturing_facility,
+      current_custodian_name: passport.current_custodian,
       status: passport.status,
       state_of_health_pct: passport.health_state.state_of_health_pct,
       carbon_footprint_total: passport.carbon_footprint.total_co2_kg_per_kwh,
@@ -2198,24 +2201,35 @@ export class SupabaseBackendRepository {
     actor?: AuthenticatedActor | null,
     clientIp?: string
   ): Promise<PhysicalVerificationResponse> {
+    const cleanBatteryId = String(batteryIdOrDid || '').trim();
+    if (!cleanBatteryId) {
+      throw new DomainError('Digital battery ID is required for verification.', 400);
+    }
+    const cleanEntered = String(payload?.physical_serial || '').trim().toUpperCase();
+    if (!cleanEntered) {
+      throw new DomainError('Physical serial number is required for verification.', 400);
+    }
+    if (cleanEntered.length > 120 || /[\x00-\x1F\x7F]/.test(cleanEntered)) {
+      throw new DomainError('Malformed physical serial number. Must not contain control characters and must not exceed 120 characters.', 400);
+    }
+
     if (!this.isConfigured()) {
       return batteryRepository.verifyPhysicalIdentity(
-        batteryIdOrDid,
+        cleanBatteryId,
         payload,
         actor ? actorToProfile(actor) : null,
         clientIp
       );
     }
 
-    const row = await this.findRawBatteryRow(batteryIdOrDid);
+    const row = await this.findRawBatteryRow(cleanBatteryId);
     if (!row) {
-      throw new DomainError(`Battery passport '${batteryIdOrDid}' not found.`, 404);
+      throw new DomainError(`Battery passport '${cleanBatteryId}' not found.`, 404);
     }
 
     const passport = await this.getPassport(row.battery_id);
     const db = this.getAdminClient();
 
-    const cleanEntered = String(payload.physical_serial || '').trim().toUpperCase();
     const cleanRegistered = String(row.serial_number || '').trim().toUpperCase();
 
     // 15-minute velocity check on verification_results

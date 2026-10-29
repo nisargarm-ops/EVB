@@ -16,8 +16,19 @@ import {
   ShieldAlert,
   Info,
   Check,
-  X
+  X,
+  QrCode,
+  ArrowRight,
+  ExternalLink,
+  Cpu,
+  Layers,
+  MapPin,
+  Clock,
+  UserCheck,
+  RefreshCw
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { Barcode128 } from '../components/Barcode128';
 import { PublicVerification, PhysicalVerificationResponse } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
@@ -28,6 +39,8 @@ interface VerifyPublicProps {
   onNavigateDetail: (id: string) => void;
   onOpenScannerModal?: () => void;
 }
+
+type DisplayStatusType = 'MATCHED' | 'MISMATCH_FRAUD' | 'VERIFICATION_REQUIRED';
 
 export const VerifyPublic: React.FC<VerifyPublicProps> = ({ 
   initialId, 
@@ -47,6 +60,9 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
   const [physicalLoading, setPhysicalLoading] = useState(false);
   const [physicalResult, setPhysicalResult] = useState<PhysicalVerificationResponse | null>(null);
   const [physicalError, setPhysicalError] = useState<string | null>(null);
+  
+  // Modals for Step 1 QR and Step 2 Casing Scanner
+  const [isDigitalScannerOpen, setIsDigitalScannerOpen] = useState(false);
   const [isCasingScannerOpen, setIsCasingScannerOpen] = useState(false);
 
   // Tamper Reporting State
@@ -80,9 +96,13 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
     const targetSerial = (serialToVerify ?? physicalSerial).trim();
     if (!targetSerial) {
       setPhysicalError('Please enter or scan the permanent laser-etched serial number from the battery pack casing.');
+      setPhysicalResult(null);
       return;
     }
-    if (!result) return;
+    if (!result) {
+      setPhysicalError('Digital passport must be resolved in Step 1 before verifying physical casing serial.');
+      return;
+    }
 
     setPhysicalLoading(true);
     setPhysicalError(null);
@@ -131,9 +151,50 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
     }
   }, [initialId]);
 
+  // Derive EXACTLY ONE status: 'Identity Matched' | 'Identity Mismatch — Possible Fraud' | 'Verification Required'
+  const getOverallStatus = (): {
+    statusType: DisplayStatusType;
+    statusLabel: string;
+    description: string;
+    badgeStyle: string;
+  } => {
+    // If either identifier is missing or unverified, status is strictly Verification Required
+    if (!result || !physicalResult || !physicalSerial.trim()) {
+      return {
+        statusType: 'VERIFICATION_REQUIRED',
+        statusLabel: t.statusVerificationRequired,
+        description: 'Step 1 complete (Digital passport loaded). Step 2 physical casing verification is required to confirm identity.',
+        badgeStyle: 'bg-[#FEF3C7] dark:bg-[#78350F]/40 text-[#D97706] dark:text-[#FBBF24] border-[#FDE68A] dark:border-[#78350F]/60',
+      };
+    }
+
+    if (physicalResult.status === 'MATCHED') {
+      return {
+        statusType: 'MATCHED',
+        statusLabel: t.statusMatched,
+        description: `Identity strictly matched: Permanent laser-engraved casing serial '${physicalResult.registered_serial_number}' matches digital passport '${physicalResult.battery_id}'.`,
+        badgeStyle: 'bg-[#ECFDF3] dark:bg-[#064E3B]/50 text-[#059669] dark:text-[#34D399] border-[#D1FAE5] dark:border-[#065F46]',
+      };
+    }
+
+    // Both MISMATCH_FRAUD and UNREGISTERED_SERIAL map to 'Identity Mismatch — Possible Fraud'
+    return {
+      statusType: 'MISMATCH_FRAUD',
+      statusLabel: t.statusMismatchFraud,
+      description: physicalResult.conflicting_battery_id 
+        ? `CRITICAL FRAUD ALERT: Physical serial belongs to different passport (${physicalResult.conflicting_battery_id}). Suspected QR label swap.`
+        : `Physical serial '${physicalResult.physical_serial_entered}' does not match registered passport or official manufacturer records.`,
+      badgeStyle: 'bg-[#FEE2E2] dark:bg-[#7F1D1D]/50 text-[#DC2626] dark:text-[#F87171] border-[#FECACA] dark:border-[#991B1B]',
+    };
+  };
+
+  const overallStatus = getOverallStatus();
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://batterypass360.eu';
+  const qrVerificationUrl = result ? `${currentOrigin}/verify/${encodeURIComponent(result.battery_id)}` : '';
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-8 select-none text-[#1F2937] dark:text-[#F1F5F9]">
-      {/* Search Header */}
+      {/* Search & Header */}
       <div className="text-center space-y-3">
         <div className="inline-flex p-3 rounded-2xl bg-[#ECFDF3] dark:bg-[#064E3B]/30 border border-[#D1FAE5] dark:border-[#065F46] text-[#059669] shadow-sm">
           <ShieldCheck className="w-8 h-8 stroke-[2.2]" />
@@ -145,7 +206,38 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
           {t.verifyGatewaySubtitle}
         </p>
 
-        {/* Input Bar & Scan QR Actions */}
+        {/* 2-Step Workflow Progress Pill Header */}
+        <div className="max-w-xl mx-auto pt-2">
+          <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-white dark:bg-[#121F17] border border-[#E5E7EB] dark:border-[#1E382B] shadow-xs text-xs">
+            <div className={`flex items-center justify-center space-x-2 py-2 px-3 rounded-xl font-medium transition-all ${
+              result 
+                ? 'bg-[#ECFDF3] dark:bg-[#064E3B]/40 text-[#059669] dark:text-[#34D399]' 
+                : 'bg-[#F8FAF7] dark:bg-[#16261D] text-[#64748B] dark:text-[#94A3B8]'
+            }`}>
+              {result ? <CheckCircle2 className="w-4 h-4 shrink-0 text-[#059669]" /> : <QrCode className="w-4 h-4 shrink-0" />}
+              <span className="font-semibold">Step 1: Digital QR Scan</span>
+            </div>
+
+            <div className={`flex items-center justify-center space-x-2 py-2 px-3 rounded-xl font-medium transition-all ${
+              overallStatus.statusType === 'MATCHED'
+                ? 'bg-[#ECFDF3] dark:bg-[#064E3B]/40 text-[#059669] dark:text-[#34D399]'
+                : overallStatus.statusType === 'MISMATCH_FRAUD'
+                ? 'bg-[#FEE2E2] dark:bg-[#7F1D1D]/40 text-[#DC2626] dark:text-[#F87171]'
+                : 'bg-[#FFFBEB] dark:bg-[#78350F]/30 text-[#D97706] dark:text-[#FBBF24]'
+            }`}>
+              {overallStatus.statusType === 'MATCHED' ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-[#059669]" />
+              ) : overallStatus.statusType === 'MISMATCH_FRAUD' ? (
+                <AlertOctagon className="w-4 h-4 shrink-0 text-[#DC2626]" />
+              ) : (
+                <Fingerprint className="w-4 h-4 shrink-0 text-[#D97706]" />
+              )}
+              <span className="font-semibold">Step 2: Casing Verification</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Input Bar & Scan QR Actions for Step 1 */}
         <div className="max-w-lg mx-auto pt-2 space-y-2.5">
           <div className="flex items-center space-x-2 bg-white dark:bg-[#121F17] border border-[#E5E7EB] dark:border-[#1E382B] rounded-2xl p-1.5 focus-within:border-[#14532D] shadow-sm">
             <Search className="w-4 h-4 text-[#64748B] dark:text-[#94A3B8] ml-3" />
@@ -157,15 +249,19 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
               onKeyDown={e => e.key === 'Enter' && handleVerify(searchId)}
               className="w-full bg-transparent border-none text-xs text-[#1F2937] dark:text-[#F1F5F9] focus:outline-none placeholder-[#94A3B8] font-mono"
             />
-            {onOpenScannerModal && (
-              <button
-                onClick={onOpenScannerModal}
-                title={t.scanQrBtn}
-                className="p-2 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] hover:bg-[#ECFDF3] dark:hover:bg-[#1F382B] text-[#14532D] dark:text-[#34D399] border border-[#E5E7EB] dark:border-[#1E382B] transition-colors"
-              >
-                <Camera className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              onClick={() => {
+                if (onOpenScannerModal) {
+                  onOpenScannerModal();
+                } else {
+                  setIsDigitalScannerOpen(true);
+                }
+              }}
+              title={t.scanQrBtn}
+              className="p-2 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] hover:bg-[#ECFDF3] dark:hover:bg-[#1F382B] text-[#14532D] dark:text-[#34D399] border border-[#E5E7EB] dark:border-[#1E382B] transition-colors"
+            >
+              <Camera className="w-4 h-4" />
+            </button>
             <button
               onClick={() => handleVerify(searchId)}
               disabled={loading}
@@ -204,10 +300,12 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
       {/* Verification Certificate Result */}
       {result && (
         <div className="space-y-6">
-          <div className="bg-white dark:bg-[#121F17] rounded-3xl p-6 sm:p-8 border border-[#D1FAE5] dark:border-[#1E382B] relative overflow-hidden shadow-sm">
+          {/* Main Inspection Banner & EXACTLY ONE Status Display */}
+          <div className="bg-white dark:bg-[#121F17] rounded-3xl p-6 sm:p-8 border border-[#D1FAE5] dark:border-[#1E382B] relative overflow-hidden shadow-sm space-y-6">
+            
             {/* Suspicious Velocity Alert Banner (if scan velocity threshold exceeded) */}
-            {(result.suspicious_repeated_scans || (physicalResult?.suspicious_repeated_scans)) && (
-              <div className="mb-6 p-4 rounded-2xl bg-[#FEF3C7] dark:bg-[#78350F]/30 border border-[#FDE68A] dark:border-[#92400E] text-[#92400E] dark:text-[#FDE68A] text-xs flex items-start space-x-3">
+            {(result.suspicious_repeated_scans || physicalResult?.suspicious_repeated_scans) && (
+              <div className="p-4 rounded-2xl bg-[#FEF3C7] dark:bg-[#78350F]/30 border border-[#FDE68A] dark:border-[#92400E] text-[#92400E] dark:text-[#FDE68A] text-xs flex items-start space-x-3">
                 <Info className="w-4 h-4 mt-0.5 shrink-0 text-[#D97706]" />
                 <div className="space-y-0.5">
                   <div className="font-bold">Scan Frequency Velocity Notice</div>
@@ -218,53 +316,42 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
 
             {/* Tamper Report Success Notice */}
             {tamperSuccess && (
-              <div className="mb-6 p-4 rounded-2xl bg-[#ECFDF3] dark:bg-[#064E3B]/30 border border-[#D1FAE5] dark:border-[#065F46] text-[#059669] dark:text-[#34D399] text-xs flex items-center space-x-3">
+              <div className="p-4 rounded-2xl bg-[#ECFDF3] dark:bg-[#064E3B]/30 border border-[#D1FAE5] dark:border-[#065F46] text-[#059669] dark:text-[#34D399] text-xs flex items-center space-x-3">
                 <Check className="w-4 h-4 shrink-0" />
                 <span>{tamperSuccess}</span>
               </div>
             )}
 
-            {/* Certificate Header */}
+            {/* Certificate Header with Single Authoritative Status Badge */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#E5E7EB] dark:border-[#1E382B]">
               <div>
                 <div className="flex items-center space-x-2">
-                  <CheckCircle2 className="w-5 h-5 text-[#059669]" />
+                  <QrCode className="w-4 h-4 text-[#059669]" />
                   <span className="text-xs font-bold text-[#059669] dark:text-[#34D399] uppercase tracking-wider font-mono">
-                    {t.verifyAuthenticCertificate}
+                    EU Battery Passport • Digital Record Resolved
                   </span>
                 </div>
-                <h2 className="text-2xl font-extrabold text-[#14532D] dark:text-[#34D399] mt-1 font-mono tracking-tight">{result.battery_id}</h2>
-                <p className="text-[11px] font-mono text-[#64748B] dark:text-[#94A3B8] mt-0.5 break-all">{result.battery_did}</p>
+                <h2 className="text-2xl font-extrabold text-[#14532D] dark:text-[#34D399] mt-1 font-mono tracking-tight">
+                  {result.battery_id}
+                </h2>
+                <p className="text-[11px] font-mono text-[#64748B] dark:text-[#94A3B8] mt-0.5 break-all">
+                  {result.battery_did}
+                </p>
               </div>
 
+              {/* Authoritative Single Status Display Badge */}
               <div className="text-left sm:text-right space-y-1.5">
-                {/* Physical Identity Verification Badge */}
                 <div>
-                  {physicalResult?.status === 'MATCHED' ? (
-                    <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#ECFDF3] dark:bg-[#064E3B]/50 text-[#059669] dark:text-[#34D399] text-xs font-bold border border-[#D1FAE5] dark:border-[#065F46]">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{t.statusMatched}</span>
-                    </span>
-                  ) : physicalResult?.status === 'MISMATCH_FRAUD' ? (
-                    <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#FEE2E2] dark:bg-[#7F1D1D]/50 text-[#DC2626] dark:text-[#F87171] text-xs font-bold border border-[#FECACA] dark:border-[#991B1B] animate-pulse">
-                      <AlertOctagon className="w-3.5 h-3.5" />
-                      <span>{t.statusMismatchFraud}</span>
-                    </span>
-                  ) : physicalResult?.status === 'UNREGISTERED_SERIAL' ? (
-                    <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#FEF3C7] dark:bg-[#78350F]/50 text-[#D97706] dark:text-[#FBBF24] text-xs font-bold border border-[#FDE68A] dark:border-[#78350F]">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      <span>{t.statusUnregistered}</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#FEF3C7] dark:bg-[#78350F]/30 text-[#D97706] dark:text-[#FBBF24] text-xs font-bold border border-[#FDE68A] dark:border-[#78350F]/40">
-                      <Fingerprint className="w-3.5 h-3.5" />
-                      <span>{t.statusVerificationRequired}</span>
-                    </span>
-                  )}
+                  <span className={`inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all ${overallStatus.badgeStyle}`}>
+                    {overallStatus.statusType === 'MATCHED' && <CheckCircle2 className="w-4 h-4 text-[#059669]" />}
+                    {overallStatus.statusType === 'MISMATCH_FRAUD' && <AlertOctagon className="w-4 h-4 text-[#DC2626] animate-pulse" />}
+                    {overallStatus.statusType === 'VERIFICATION_REQUIRED' && <Fingerprint className="w-4 h-4 text-[#D97706]" />}
+                    <span>{overallStatus.statusLabel}</span>
+                  </span>
                 </div>
 
                 <div className="text-[10px] text-[#64748B] dark:text-[#94A3B8] font-mono">
-                  Verified At: {new Date(result.verification_timestamp).toLocaleString()}
+                  Resolved: {new Date(result.verification_timestamp).toLocaleString()}
                 </div>
                 {verifiedNonce && (
                   <div className="text-[9px] text-[#94A3B8] font-mono">
@@ -274,8 +361,71 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
               </div>
             </div>
 
-            {/* Core Metrology Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 py-6">
+            {/* DUAL IDENTIFIERS COMPARISON SUMMARY: Shows BOTH Scanned Identifiers */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#14532D] dark:text-[#34D399] uppercase tracking-wider font-mono">
+                  Dual-ID Verification Comparison (Digital vs Physical)
+                </span>
+                <span className="text-[11px] text-[#64748B] dark:text-[#94A3B8] font-medium">
+                  EU Regulation 2023/1542 Compliant
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Identifier 1: Digital Passport QR Code */}
+                <div className="p-4 rounded-2xl bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B] flex items-center space-x-4">
+                  <div className="p-2 bg-white rounded-xl border border-[#E5E7EB] shrink-0 shadow-xs">
+                    <QRCodeSVG
+                      value={qrVerificationUrl || result.battery_id}
+                      size={64}
+                      level="M"
+                      includeMargin={false}
+                    />
+                  </div>
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center space-x-1.5 text-[11px] font-bold text-[#059669] dark:text-[#34D399]">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Identifier 1: Digital Passport QR</span>
+                    </div>
+                    <div className="font-mono text-xs font-bold text-[#1F2937] dark:text-[#F1F5F9] truncate">
+                      {result.battery_id}
+                    </div>
+                    <div className="text-[10px] text-[#64748B] dark:text-[#94A3B8] truncate">
+                      Source: Supabase Ledger (Registered)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Identifier 2: Physical Casing Barcode (Code 128) */}
+                <div className="p-4 rounded-2xl bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B] flex items-center space-x-4">
+                  <div className="p-2 bg-white rounded-xl border border-[#E5E7EB] shrink-0 shadow-xs max-w-[120px] overflow-hidden">
+                    <Barcode128
+                      serialNumber={result.serial_number || 'UNKNOWN-SERIAL'}
+                      height={32}
+                      moduleWidth={1.2}
+                      showText={false}
+                      className="w-full h-auto"
+                    />
+                  </div>
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center space-x-1.5 text-[11px] font-bold text-[#14532D] dark:text-[#34D399]">
+                      <Barcode className="w-3.5 h-3.5" />
+                      <span>Identifier 2: Physical Casing Serial</span>
+                    </div>
+                    <div className="font-mono text-xs font-bold text-[#1F2937] dark:text-[#F1F5F9] truncate">
+                      {result.serial_number || 'N/A'}
+                    </div>
+                    <div className="text-[10px] text-[#64748B] dark:text-[#94A3B8]">
+                      Format: ISO/IEC 15417 Code 128 (Laser Etch)
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Core Metrology Grid (Real Data) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 py-2">
               <div className="p-3.5 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B]">
                 <div className="text-[11px] text-[#64748B] dark:text-[#94A3B8]">Manufacturer</div>
                 <div className="text-xs font-bold text-[#1F2937] dark:text-[#F1F5F9] mt-1">{result.manufacturer_name}</div>
@@ -287,7 +437,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
               </div>
 
               <div className="p-3.5 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B]">
-                <div className="text-[11px] text-[#64748B] dark:text-[#94A3B8]">{t.stateOfHealth}</div>
+                <div className="text-[11px] text-[#64748B] dark:text-[#94A3B8]">{t.stateOfHealth} (BMS Telemetry)</div>
                 <div className="text-xs font-bold text-[#059669] dark:text-[#34D399] mt-1 font-mono">{result.state_of_health_pct}%</div>
               </div>
 
@@ -297,7 +447,40 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
               </div>
             </div>
 
-            {/* Tamper Evidence Seal Banner */}
+            {/* Additional Real Manufacturing Details Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 py-2 border-t border-[#E5E7EB] dark:border-[#1E382B]">
+              <div className="p-3 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B]">
+                <div className="text-[10px] text-[#64748B] dark:text-[#94A3B8] flex items-center space-x-1">
+                  <Calendar className="w-3 h-3" />
+                  <span>Manufacturing Date</span>
+                </div>
+                <div className="text-xs font-mono font-bold text-[#1F2937] dark:text-[#F1F5F9] mt-0.5">
+                  {new Date(result.manufacturing_date).toLocaleDateString()}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B]">
+                <div className="text-[10px] text-[#64748B] dark:text-[#94A3B8] flex items-center space-x-1">
+                  <MapPin className="w-3 h-3" />
+                  <span>Country & Facility</span>
+                </div>
+                <div className="text-xs font-bold text-[#1F2937] dark:text-[#F1F5F9] mt-0.5 truncate">
+                  {result.manufacturing_country || 'EU'} • {result.manufacturing_facility || 'Certified OEM Gigafactory'}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B]">
+                <div className="text-[10px] text-[#64748B] dark:text-[#94A3B8] flex items-center space-x-1">
+                  <Layers className="w-3 h-3" />
+                  <span>Model Designation</span>
+                </div>
+                <div className="text-xs font-bold text-[#1F2937] dark:text-[#F1F5F9] mt-0.5 truncate">
+                  {result.model_designation}
+                </div>
+              </div>
+            </div>
+
+            {/* Tamper Evidence Seal & Lifecycle Hash Banner */}
             <div className="p-4 rounded-2xl bg-[#ECFDF3] dark:bg-[#064E3B]/30 border border-[#D1FAE5] dark:border-[#065F46] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center space-x-3">
                 <div className="p-2 rounded-xl bg-white dark:bg-[#16261D] border border-[#D1FAE5] dark:border-[#065F46] text-[#059669]">
@@ -320,7 +503,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
             </div>
           </div>
 
-          {/* DUAL-ID PHYSICAL IDENTITY VERIFICATION PANEL */}
+          {/* DUAL-ID PHYSICAL IDENTITY VERIFICATION PANEL (Step 2) */}
           <div className="bg-white dark:bg-[#121F17] rounded-3xl p-6 sm:p-8 border border-[#E5E7EB] dark:border-[#1E382B] space-y-6 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-start space-x-3">
@@ -447,9 +630,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
               <div className={`p-5 rounded-2xl border transition-all ${
                 physicalResult.status === 'MATCHED'
                   ? 'bg-[#ECFDF3] dark:bg-[#064E3B]/20 border-[#A7F3D0] dark:border-[#065F46]'
-                  : physicalResult.status === 'MISMATCH_FRAUD'
-                  ? 'bg-[#FEF2F2] dark:bg-[#7F1D1D]/20 border-[#FECACA] dark:border-[#991B1B]'
-                  : 'bg-[#FFFBEB] dark:bg-[#78350F]/20 border-[#FDE68A] dark:border-[#78350F]'
+                  : 'bg-[#FEF2F2] dark:bg-[#7F1D1D]/20 border-[#FECACA] dark:border-[#991B1B]'
               }`}>
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                   <div className="flex items-start space-x-3.5">
@@ -457,13 +638,9 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
                       <div className="p-2 rounded-xl bg-[#059669] text-white shrink-0 mt-0.5">
                         <CheckCircle2 className="w-5 h-5" />
                       </div>
-                    ) : physicalResult.status === 'MISMATCH_FRAUD' ? (
+                    ) : (
                       <div className="p-2 rounded-xl bg-[#DC2626] text-white shrink-0 mt-0.5">
                         <AlertOctagon className="w-5 h-5" />
-                      </div>
-                    ) : (
-                      <div className="p-2 rounded-xl bg-[#D97706] text-white shrink-0 mt-0.5">
-                        <AlertTriangle className="w-5 h-5" />
                       </div>
                     )}
 
@@ -472,15 +649,11 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
                         <span className={`text-sm font-extrabold tracking-tight ${
                           physicalResult.status === 'MATCHED'
                             ? 'text-[#065F46] dark:text-[#34D399]'
-                            : physicalResult.status === 'MISMATCH_FRAUD'
-                            ? 'text-[#991B1B] dark:text-[#F87171]'
-                            : 'text-[#92400E] dark:text-[#FBBF24]'
+                            : 'text-[#991B1B] dark:text-[#F87171]'
                         }`}>
                           {physicalResult.status === 'MATCHED'
                             ? t.statusMatched
-                            : physicalResult.status === 'MISMATCH_FRAUD'
-                            ? t.statusMismatchFraud
-                            : t.statusUnregistered}
+                            : t.statusMismatchFraud}
                         </span>
                         <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-white/70 dark:bg-black/30 border border-current">
                           {physicalResult.fraud_type || 'AUTHENTIC_SERIAL'}
@@ -508,7 +681,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
             )}
           </div>
 
-          {/* Anti-Counterfeiting & Physical Inspection Protocol Banner */}
+          {/* Explicit Separation of Identity Verification vs Battery Condition Banner */}
           <div className="bg-[#FEF3C7]/40 dark:bg-[#78350F]/20 p-6 rounded-3xl border border-[#FDE68A] dark:border-[#78350F]/40 space-y-4 shadow-sm">
             <div className="flex items-start space-x-3">
               <div className="p-2 rounded-xl bg-white dark:bg-[#16261D] border border-[#FDE68A] dark:border-[#78350F] text-[#D97706] shrink-0 mt-0.5">
@@ -519,9 +692,9 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
                   Physical Pack Anti-Counterfeiting Protocol (EU Regulation 2023/1542)
                 </h3>
                 <p className="text-xs text-[#78350F] dark:text-[#FDE68A] leading-relaxed">
-                  <strong>Important Security Rule:</strong> A QR code scan alone confirms the digital record exists on the ledger, 
-                  but does <em>not</em> constitute physical possession or preclude physical relabeling. 
-                  Inspectors and buyers must physically cross-verify the following physical checkpoints:
+                  <strong>Critical Boundary:</strong> Physical identity matching confirms that this metal casing corresponds to the registered digital passport. 
+                  However, matching identifiers alone does <em>not</em> prove internal electrochemical health (SOH), cell degradation, absence of internal cell swaps, or safety compliance. 
+                  Follow the mandatory three-point inspection procedure:
                 </p>
               </div>
             </div>
@@ -561,7 +734,19 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
         </div>
       )}
 
-      {/* Casing Barcode Scanner Modal */}
+      {/* Step 1 Digital QR Scanner Modal */}
+      <QRScannerModal
+        isOpen={isDigitalScannerOpen}
+        onClose={() => setIsDigitalScannerOpen(false)}
+        title="Scan Digital Battery Passport QR Code"
+        onScanSuccess={(detectedCode) => {
+          setIsDigitalScannerOpen(false);
+          setSearchId(detectedCode);
+          handleVerify(detectedCode);
+        }}
+      />
+
+      {/* Step 2 Casing Barcode Scanner Modal */}
       <QRScannerModal
         isOpen={isCasingScannerOpen}
         onClose={() => setIsCasingScannerOpen(false)}

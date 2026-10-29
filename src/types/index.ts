@@ -261,6 +261,9 @@ export interface PublicVerification {
   model_designation: string;
   chemistry: string;
   manufacturing_date: string;
+  manufacturing_country?: string;
+  manufacturing_facility?: string;
+  current_custodian_name?: string;
   status: string;
   state_of_health_pct: number;
   carbon_footprint_total: number;
