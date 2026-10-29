@@ -21,6 +21,7 @@ import {
   generateImmutableBatteryId,
   verifyChainIntegrity,
 } from '../services/hasher.ts';
+import { batteryRepository } from '../services/store.ts';
 import type { AuthenticatedActor } from './auth.ts';
 import {
   ROLE_DEFAULT_ORGS,
@@ -822,6 +823,14 @@ export class SupabaseBackendRepository {
   }
 
   async resolveOrCreateOrganization(name: string, fallbackRole: UserRole): Promise<Organization> {
+    if (!this.isConfigured()) {
+      const orgs = batteryRepository.listOrganizations();
+      const clean = name.trim().toLowerCase();
+      const found = orgs.find((o) => o.name.trim().toLowerCase() === clean);
+      if (found) return found;
+      const def = ROLE_DEFAULT_ORGS[fallbackRole];
+      return orgs.find((o) => o.id === def.id) || orgs[0];
+    }
     await this.ensureSeeded();
     const orgs = await this.listOrganizations();
     const clean = name.trim().toLowerCase();
@@ -881,6 +890,9 @@ export class SupabaseBackendRepository {
   }
 
   async listOrganizations(): Promise<Organization[]> {
+    if (!this.isConfigured()) {
+      return batteryRepository.listOrganizations();
+    }
     await this.ensureSeeded();
     const db = this.getAdminClient();
     const { data, error } = await db
@@ -1018,6 +1030,9 @@ export class SupabaseBackendRepository {
   }
 
   async listPassports(statusFilter?: string): Promise<PassportSummary[]> {
+    if (!this.isConfigured()) {
+      return batteryRepository.listPassports(statusFilter);
+    }
     await this.ensureSeeded();
     const db = this.getAdminClient();
     let query = db.from('batteries').select('*').order('created_at', { ascending: false });
@@ -1053,6 +1068,13 @@ export class SupabaseBackendRepository {
   }
 
   async getPassport(idOrDid: string): Promise<BatteryPassport> {
+    if (!this.isConfigured()) {
+      const found = await batteryRepository.getPassport(idOrDid);
+      if (!found) {
+        throw new DomainError(`Battery passport '${idOrDid}' not found.`, 404);
+      }
+      return found;
+    }
     const row = await this.findRawBatteryRow(idOrDid);
     if (!row) {
       throw new DomainError(`Battery passport '${idOrDid}' not found.`, 404);
@@ -1063,6 +1085,18 @@ export class SupabaseBackendRepository {
   }
 
   async createPassport(payload: any, actor: AuthenticatedActor): Promise<BatteryPassport> {
+    if (!this.isConfigured()) {
+      try {
+        return await batteryRepository.createPassport(payload, {
+          role: actor.role,
+          organization: actor.organization_name,
+        });
+      } catch (err: any) {
+        const msg = err.message || 'Failed to create battery passport';
+        const code = msg.includes('Access denied') || msg.includes('violation') ? 403 : 400;
+        throw new DomainError(msg, code);
+      }
+    }
     await this.ensureSeeded();
     if (actor.role !== 'MANUFACTURER' && actor.role !== 'ADMINISTRATOR') {
       throw new DomainError(
@@ -1208,6 +1242,18 @@ export class SupabaseBackendRepository {
     telemetry: any,
     actor: AuthenticatedActor
   ): Promise<BatteryPassport> {
+    if (!this.isConfigured()) {
+      try {
+        return await batteryRepository.updateTelemetry(idOrDid, telemetry, {
+          role: actor.role,
+          organization: actor.organization_name,
+        });
+      } catch (err: any) {
+        const msg = err.message || 'Failed to update telemetry';
+        const code = msg.includes('Access denied') ? 403 : 400;
+        throw new DomainError(msg, code);
+      }
+    }
     const row = await this.findRawBatteryRow(idOrDid);
     if (!row) {
       throw new DomainError(`Battery passport '${idOrDid}' not found.`, 404);
@@ -1414,6 +1460,9 @@ export class SupabaseBackendRepository {
   }
 
   async getCustodyEvents(idOrDid: string): Promise<CustodyEvent[]> {
+    if (!this.isConfigured()) {
+      return batteryRepository.getCustodyEvents(idOrDid);
+    }
     const row = await this.findRawBatteryRow(idOrDid);
     if (!row) {
       throw new DomainError(`Battery passport '${idOrDid}' not found.`, 404);
@@ -1426,6 +1475,19 @@ export class SupabaseBackendRepository {
     eventInput: any,
     actor: AuthenticatedActor
   ): Promise<CustodyEvent> {
+    if (!this.isConfigured()) {
+      try {
+        return await batteryRepository.appendCustodyEvent(idOrDid, {
+          ...eventInput,
+          actor_role: actor.role,
+          actor_organization: actor.organization_name,
+        });
+      } catch (err: any) {
+        const msg = err.message || 'Failed to append custody event';
+        const code = msg.includes('Access denied') ? 403 : 400;
+        throw new DomainError(msg, code);
+      }
+    }
     const row = await this.findRawBatteryRow(idOrDid);
     if (!row) {
       throw new DomainError(`Battery passport '${idOrDid}' not found.`, 404);
@@ -1456,6 +1518,9 @@ export class SupabaseBackendRepository {
   }
 
   async listTransfers(): Promise<CustodyTransfer[]> {
+    if (!this.isConfigured()) {
+      return batteryRepository.listTransfers();
+    }
     await this.ensureSeeded();
     const db = this.getAdminClient();
     const [{ data: transfers, error }, orgMap, { data: batteries }] = await Promise.all([
@@ -1501,6 +1566,18 @@ export class SupabaseBackendRepository {
     },
     actor: AuthenticatedActor
   ): Promise<CustodyTransfer> {
+    if (!this.isConfigured()) {
+      try {
+        return await batteryRepository.createTransfer(payload, {
+          role: actor.role,
+          organization: actor.organization_name,
+        });
+      } catch (err: any) {
+        const msg = err.message || 'Failed to create custody transfer';
+        const code = msg.includes('Access denied') || msg.includes('denied') ? 403 : 400;
+        throw new DomainError(msg, code);
+      }
+    }
     const row = await this.findRawBatteryRow(payload.battery_id);
     if (!row) {
       throw new DomainError(`Battery '${payload.battery_id}' not found.`, 404);
@@ -1591,6 +1668,18 @@ export class SupabaseBackendRepository {
     notes: string | undefined,
     actor: AuthenticatedActor
   ): Promise<CustodyTransfer> {
+    if (!this.isConfigured()) {
+      try {
+        return await batteryRepository.acceptCustodyTransfer(transferId, notes, {
+          role: actor.role,
+          organization: actor.organization_name,
+        });
+      } catch (err: any) {
+        const msg = err.message || 'Failed to accept custody transfer';
+        const code = msg.includes('Access denied') ? 403 : 400;
+        throw new DomainError(msg, code);
+      }
+    }
     await this.ensureSeeded();
     const db = this.getAdminClient();
     const { data: transfer, error: fetchErr } = await db
@@ -1724,7 +1813,18 @@ export class SupabaseBackendRepository {
     if (!reason || !reason.trim()) {
       throw new DomainError('A valid rejection reason is required under EU custody rules.', 400);
     }
-
+    if (!this.isConfigured()) {
+      try {
+        return await batteryRepository.rejectCustodyTransfer(transferId, reason, {
+          role: actor.role,
+          organization: actor.organization_name,
+        });
+      } catch (err: any) {
+        const msg = err.message || 'Failed to reject custody transfer';
+        const code = msg.includes('Access denied') ? 403 : 400;
+        throw new DomainError(msg, code);
+      }
+    }
     await this.ensureSeeded();
     const db = this.getAdminClient();
     const { data: transfer, error: fetchErr } = await db
@@ -1807,6 +1907,9 @@ export class SupabaseBackendRepository {
   }
 
   async verifyAuditTrail(idOrDid: string): Promise<AuditVerification> {
+    if (!this.isConfigured()) {
+      return batteryRepository.verifyAuditTrail(idOrDid);
+    }
     const row = await this.findRawBatteryRow(idOrDid);
     if (!row) {
       throw new DomainError(`Battery passport '${idOrDid}' not found.`, 404);
@@ -1848,6 +1951,9 @@ export class SupabaseBackendRepository {
   }
 
   async verifyPublic(idOrDid: string): Promise<PublicVerification> {
+    if (!this.isConfigured()) {
+      return batteryRepository.verifyPublic(idOrDid);
+    }
     const passport = await this.getPassport(idOrDid);
     const audit = await this.verifyAuditTrail(passport.battery_id);
 
@@ -1871,6 +1977,13 @@ export class SupabaseBackendRepository {
   }
 
   async getDispositionDecision(idOrDid: string): Promise<DispositionDecision> {
+    if (!this.isConfigured()) {
+      try {
+        return await batteryRepository.getDispositionDecision(idOrDid);
+      } catch (err: any) {
+        throw new DomainError(err.message || 'Disposition decision not found', 404);
+      }
+    }
     const row = await this.findRawBatteryRow(idOrDid);
     if (!row) {
       throw new DomainError(`Battery passport '${idOrDid}' not found.`, 404);

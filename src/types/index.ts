@@ -205,13 +205,21 @@ export interface QpiAIOptResponse {
   configured: boolean;
   authenticated?: boolean;
   is_cloud_result?: boolean;
+  is_live_cloud?: boolean;
   execution_mode?:
     | 'QPIAI_OPT_CLOUD'
     | 'LOCAL_EXACT_SOLVER'
     | 'CLOUD_REJECTED_QUOTA'
     | 'FORMULATION_ONLY'
-    | 'ERROR';
+    | 'ERROR'
+    | 'unauthenticated_formulation_only'
+    | 'authentication_failed'
+    | 'qpiai_opt_cloud_platform'
+    | 'qpiai_opt_authenticated_local'
+    | 'error'
+    | string;
   solver_backend?: string | null;
+  solver_name?: string | null;
   problem_type: string;
   problem_id?: string | null;
   num_variables: number;
@@ -227,6 +235,9 @@ export interface QpiAIOptResponse {
   execution_time_seconds?: number | null;
   job_id?: string | null;
   provider_http_status?: number | null;
+  constraints_considered?: string[];
+  allocation_reasoning?: Record<string, string> | string[];
+  warnings?: string[];
   message: string;
   instructions?: string | null;
 }
@@ -245,21 +256,32 @@ export interface QpiAIQuantumResponse {
   qcloud_authenticated?: boolean;
   is_cloud_execution?: boolean;
   is_hardware_execution?: boolean;
+  is_cloud_hardware?: boolean;
   execution_mode?:
     | 'QCLOUD_QUANTUM_HARDWARE'
     | 'QCLOUD_REMOTE_SIMULATOR'
     | 'LOCAL_STATEVECTOR_SIMULATOR'
     | 'QCLOUD_REJECTED_SUBSCRIPTION'
     | 'FORMULATION_ONLY'
-    | 'ERROR';
+    | 'ERROR'
+    | 'unauthenticated_local_preview'
+    | 'authentication_failed'
+    | 'qcloud_authenticated_local_statevector'
+    | 'qcloud_submission_error'
+    | 'qcloud_hardware_qpu'
+    | 'qcloud_remote_simulator'
+    | 'error'
+    | string;
   backend_used: string;
   job_id?: string | null;
   circuit_id?: string | null;
   shots?: number;
   measured_counts?: Record<string, number>;
+  measurement_counts?: Record<string, number>;
   execution_time_seconds?: number | null;
   provider_http_status?: number | null;
   available_cloud_backends?: string[];
+  available_backends?: string[];
   num_qubits: number;
   circuit_depth: number;
   quantum_gate_counts: Record<string, number>;
@@ -267,8 +289,34 @@ export interface QpiAIQuantumResponse {
   estimated_ground_state_energy_hartree: number;
   projected_capacity_fade_rate: number;
   molecular_degradation_risk: string;
+  openqasm_circuit?: string;
   message: string;
   instructions?: string | null;
+}
+
+export interface IntegrationsStatus {
+  supabase: DatabaseStatus;
+  qpiai_opt: {
+    configured: boolean;
+    authenticated?: boolean;
+    endpoint?: string;
+    endpoint_url?: string;
+    plan_tier?: string;
+    execution_mode?: string;
+    message?: string;
+  };
+  qpiai_qcloud: {
+    configured: boolean;
+    authenticated?: boolean;
+    endpoint?: string;
+    endpoint_url?: string;
+    default_backend: string;
+    active_subscription?: boolean;
+    supported_backends?: readonly string[] | string[];
+    available_backends?: string[];
+    message?: string;
+  };
+  checked_at: string;
 }
 
 export interface DatabaseTableStatus {

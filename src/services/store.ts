@@ -918,6 +918,41 @@ export class BatteryRepository {
     return transfer;
   }
 
+  async listTransfers(): Promise<CustodyTransfer[]> {
+    return this.listCustodyTransfers();
+  }
+
+  async createTransfer(
+    data: {
+      battery_id: string;
+      receiver_org_id: string;
+      receiver_org_name: string;
+      sender_org_id?: string;
+      sender_org_name?: string;
+      transfer_type: string;
+      notes?: string;
+    },
+    actor?: { role: string; organization: string }
+  ): Promise<CustodyTransfer> {
+    return this.createCustodyTransfer(data, actor);
+  }
+
+  async acceptTransfer(
+    transferId: string,
+    notes?: string,
+    actor?: { role: string; organization: string }
+  ): Promise<CustodyTransfer> {
+    return this.acceptCustodyTransfer(transferId, notes, actor);
+  }
+
+  async rejectTransfer(
+    transferId: string,
+    reason: string,
+    actor?: { role: string; organization: string }
+  ): Promise<CustodyTransfer> {
+    return this.rejectCustodyTransfer(transferId, reason, actor);
+  }
+
   async getDispositionDecision(batteryId: string): Promise<DispositionDecision> {
     const passport = await this.getPassport(batteryId);
     if (!passport) throw new Error(`Battery ${batteryId} not found.`);
