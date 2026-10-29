@@ -793,9 +793,34 @@ export const api = {
   // --------------------------------------------------------------------------
   async getTwoStepPrecheck(batteryId: string): Promise<TwoStepPrecheckResponse> {
     if (isBrowserRuntime) {
-      return backendFetch<TwoStepPrecheckResponse>(
-        `/verify/${encodeURIComponent(batteryId)}/precheck`
-      );
+      try {
+        return await backendFetch<TwoStepPrecheckResponse>(
+          `/verify/${encodeURIComponent(batteryId)}/precheck`
+        );
+      } catch (err: any) {
+        if (err.message && err.message.includes('not found')) {
+          // Resilient fallback to resolving passport reference via canonical /verify/:batteryId
+          const publicCert = await backendFetch<PublicVerification>(
+            `/verify/${encodeURIComponent(batteryId)}`
+          );
+          return {
+            battery_id: publicCert.battery_id,
+            battery_did: publicCert.battery_did,
+            status: (publicCert.physical_verification_status as any) === 'SUSPICIOUS_VERIFICATION_REQUIRED'
+              ? 'SUSPICIOUS_LOCKED'
+              : 'AWAITING_PHYSICAL_UID',
+            is_flagged: Boolean(publicCert.physical_verification_status === 'SUSPICIOUS_VERIFICATION_REQUIRED'),
+            is_locked: Boolean(publicCert.physical_verification_status === 'SUSPICIOUS_VERIFICATION_REQUIRED'),
+            consecutive_failed_attempts: 0,
+            remaining_attempts: 5,
+            manufacturer_hint: publicCert.manufacturer_name,
+            model_designation: publicCert.model_designation,
+            requires_physical_uid: true,
+            message: 'Digital QR passport reference resolved. Step 2 required: Enter or scan the permanent UID engraved on the physical battery casing.',
+          };
+        }
+        throw err;
+      }
     }
     return batteryRepository.getTwoStepPrecheck(batteryId);
   },

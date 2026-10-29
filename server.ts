@@ -413,6 +413,36 @@ async function startServer() {
     }
   );
 
+  // Secure Two-Step Battery Verification: Step 1 QR Reference Pre-Check
+  // Never leaks physical UID/serial number, BMS health, or confidential specs before Step 2 match
+  apiRouter.get('/verify/:batteryId/precheck', async (req: Request, res: Response) => {
+    try {
+      const rawBatteryId = String(req.params.batteryId || '').trim();
+      if (!rawBatteryId || rawBatteryId === 'undefined' || rawBatteryId === 'null') {
+        res.status(400).json({ detail: 'Digital Battery ID is required for verification pre-check.' });
+        return;
+      }
+      const pre = await supabaseBackendRepo.getTwoStepPrecheck(rawBatteryId);
+      res.json(pre);
+    } catch (err) {
+      sendError(res, err, 'Failed to resolve battery verification pre-check');
+    }
+  });
+
+  apiRouter.get('/verify/:batteryId/session', async (req: Request, res: Response) => {
+    try {
+      const rawBatteryId = String(req.params.batteryId || '').trim();
+      if (!rawBatteryId || rawBatteryId === 'undefined' || rawBatteryId === 'null') {
+        res.status(400).json({ detail: 'Digital Battery ID is required.' });
+        return;
+      }
+      const pre = await supabaseBackendRepo.getTwoStepPrecheck(rawBatteryId);
+      res.json(pre);
+    } catch (err) {
+      sendError(res, err, 'Failed to resolve battery verification session');
+    }
+  });
+
   // Public QR Verification & Cryptographic Audit Trail
   apiRouter.get('/verify/:batteryId/audit-trail', async (req: Request, res: Response) => {
     try {
@@ -423,32 +453,22 @@ async function startServer() {
     }
   });
 
+  // Anti-Fraud: Battery Fraud and Velocity Audit Status
+  apiRouter.get('/verify/:batteryId/fraud-status', async (req: Request, res: Response) => {
+    try {
+      const status = await supabaseBackendRepo.getFraudStatus(String(req.params.batteryId));
+      res.json(status);
+    } catch (err) {
+      sendError(res, err, 'Failed to retrieve battery anti-fraud status');
+    }
+  });
+
   apiRouter.get('/verify/:batteryId', async (req: Request, res: Response) => {
     try {
       const cert = await supabaseBackendRepo.verifyPublic(String(req.params.batteryId));
       res.json(cert);
     } catch (err) {
       sendError(res, err, 'Failed to verify public battery passport');
-    }
-  });
-
-  // Secure Two-Step Battery Verification: Step 1 QR Reference Pre-Check
-  // Never leaks physical UID/serial number, BMS health, or confidential specs before Step 2 match
-  apiRouter.get('/verify/:batteryId/precheck', async (req: Request, res: Response) => {
-    try {
-      const pre = await supabaseBackendRepo.getTwoStepPrecheck(String(req.params.batteryId));
-      res.json(pre);
-    } catch (err) {
-      sendError(res, err, 'Failed to resolve battery verification pre-check');
-    }
-  });
-
-  apiRouter.get('/verify/:batteryId/session', async (req: Request, res: Response) => {
-    try {
-      const pre = await supabaseBackendRepo.getTwoStepPrecheck(String(req.params.batteryId));
-      res.json(pre);
-    } catch (err) {
-      sendError(res, err, 'Failed to resolve battery verification session');
     }
   });
 
@@ -548,16 +568,6 @@ async function startServer() {
       }
     }
   );
-
-  // Anti-Fraud: Battery Fraud and Velocity Audit Status
-  apiRouter.get('/verify/:batteryId/fraud-status', async (req: Request, res: Response) => {
-    try {
-      const status = await supabaseBackendRepo.getFraudStatus(String(req.params.batteryId));
-      res.json(status);
-    } catch (err) {
-      sendError(res, err, 'Failed to retrieve battery anti-fraud status');
-    }
-  });
 
   // Disposition Decisions
   apiRouter.get('/decisions/:batteryId', async (req: Request, res: Response) => {
