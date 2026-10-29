@@ -1,17 +1,36 @@
-import React, { useState } from 'react';
-import { X, Download, Copy, Check, Printer, ExternalLink, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Download, Copy, Check, Printer, ExternalLink, ShieldCheck, Barcode } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { Barcode128 } from './Barcode128';
+import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 
 interface QRCodeModalProps {
   batteryId: string;
+  serialNumber?: string;
   onClose: () => void;
   onNavigateVerify: (id: string) => void;
 }
 
-export const QRCodeModal: React.FC<QRCodeModalProps> = ({ batteryId, onClose, onNavigateVerify }) => {
+export const QRCodeModal: React.FC<QRCodeModalProps> = ({
+  batteryId,
+  serialNumber,
+  onClose,
+  onNavigateVerify,
+}) => {
   const { t } = useLanguage();
   const [copied, setCopied] = useState(false);
+  const [casingSerial, setCasingSerial] = useState<string | null>(serialNumber || null);
+
+  useEffect(() => {
+    if (!casingSerial) {
+      api.getPassport(batteryId)
+        .then((p) => {
+          if (p && p.serial_number) setCasingSerial(p.serial_number);
+        })
+        .catch(() => {});
+    }
+  }, [batteryId, casingSerial]);
 
   // Security check: Only encode the public verification link and battery ID
   // Strictly zero private keys, API secrets, or internal formulations
@@ -40,7 +59,6 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ batteryId, onClose, on
       if (!ctx) return;
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 50, 45);
 
       // EU Regulation Header
       ctx.fillStyle = '#059669';
@@ -63,7 +81,46 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ batteryId, onClose, on
       a.href = canvas.toDataURL('image/png');
       a.click();
     };
-    img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+  };
+
+  const handleDownloadBarcodePng = () => {
+    if (!casingSerial) return;
+    const svg = document.getElementById('modal-barcode-svg');
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = Math.max(img.width + 100, 560);
+      canvas.height = img.height + 120;
+      if (!ctx) return;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#059669';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('EU 2023/1542 PHYSICAL PACK SERIAL NUMBER', canvas.width / 2, 28);
+
+      const x = (canvas.width - img.width) / 2;
+      ctx.drawImage(img, x, 42);
+
+      ctx.font = '10px monospace';
+      ctx.fillStyle = '#64748B';
+      ctx.fillText(
+        `Code 128 Subset B • Laser Casing ID: ${casingSerial} • Bound to: ${batteryId}`,
+        canvas.width / 2,
+        canvas.height - 18
+      );
+
+      const a = document.createElement('a');
+      a.download = `BatteryPass-${casingSerial}-Barcode.png`;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    };
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
   };
 
   const handlePrint = () => {
@@ -71,8 +128,8 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ batteryId, onClose, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="bg-white dark:bg-[#121F17] border border-[#E5E7EB] dark:border-[#1E382B] rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl relative text-[#1F2937] dark:text-[#F1F5F9]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs select-none">
+      <div className="bg-white dark:bg-[#121F17] border border-[#E5E7EB] dark:border-[#1E382B] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl relative text-[#1F2937] dark:text-[#F1F5F9]">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -94,7 +151,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ batteryId, onClose, on
         {/* Printable QR Sticker Container */}
         <div 
           id="qr-print-area"
-          className="bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B] p-5 rounded-2xl flex flex-col items-center justify-center mx-auto max-w-[280px] shadow-inner"
+          className="bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B] p-5 rounded-2xl flex flex-col items-center justify-center mx-auto max-w-[340px] shadow-inner"
         >
           <div className="bg-white p-3.5 rounded-xl border border-[#E5E7EB] shadow-xs">
             <QRCodeSVG 
@@ -105,7 +162,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ batteryId, onClose, on
               includeMargin={false}
             />
           </div>
-          <div className="mt-3.5 text-center">
+          <div className="mt-3 text-center">
             <div className="font-mono font-bold text-[#14532D] dark:text-[#34D399] text-sm tracking-wider">
               {batteryId}
             </div>
@@ -113,18 +170,51 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ batteryId, onClose, on
               EU 2023/1542 Verified Pointer
             </div>
           </div>
+
+          {/* Physical Serial Barcode (Code 128) */}
+          {casingSerial && (
+            <div className="w-full mt-4 pt-3.5 border-t border-[#E5E7EB] dark:border-[#1E382B] flex flex-col items-center">
+              <div className="text-[10px] text-[#059669] dark:text-[#34D399] font-bold tracking-wider mb-1.5 uppercase flex items-center space-x-1.5">
+                <Barcode className="w-3.5 h-3.5" />
+                <span>Physical Casing Serial (Code 128)</span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-[#E5E7EB] shadow-2xs w-full flex items-center justify-center">
+                <Barcode128
+                  id="modal-barcode-svg"
+                  serialNumber={casingSerial}
+                  height={45}
+                  moduleWidth={2}
+                  showText={true}
+                />
+              </div>
+              <div className="text-[10px] text-[#64748B] dark:text-[#94A3B8] font-mono mt-1 text-center">
+                Laser Engraving: <strong className="text-[#14532D] dark:text-[#34D399]">{casingSerial}</strong>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Primary Action Buttons */}
-        <div className="mt-6 grid grid-cols-3 gap-2.5">
+        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             onClick={handleDownloadPng}
             className="flex flex-col sm:flex-row items-center justify-center space-y-1 sm:space-y-0 sm:space-x-1.5 py-2.5 px-2 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] hover:bg-[#ECFDF3] dark:hover:bg-[#1F382B] text-[#1F2937] dark:text-[#F1F5F9] text-xs font-semibold border border-[#E5E7EB] dark:border-[#1E382B] hover:border-[#14532D] transition-all"
-            title={t.qrDownloadPng}
+            title="Download QR Code PNG"
           >
-            <Download className="w-4 h-4 text-[#059669]" />
-            <span className="text-[11px] font-medium">{t.qrDownloadPng.split(' ')[0]} PNG</span>
+            <Download className="w-3.5 h-3.5 text-[#059669]" />
+            <span className="text-[11px] font-medium">QR PNG</span>
           </button>
+
+          {casingSerial && (
+            <button
+              onClick={handleDownloadBarcodePng}
+              className="flex flex-col sm:flex-row items-center justify-center space-y-1 sm:space-y-0 sm:space-x-1.5 py-2.5 px-2 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] hover:bg-[#ECFDF3] dark:hover:bg-[#1F382B] text-[#1F2937] dark:text-[#F1F5F9] text-xs font-semibold border border-[#E5E7EB] dark:border-[#1E382B] hover:border-[#14532D] transition-all"
+              title="Download Physical Serial Barcode PNG"
+            >
+              <Barcode className="w-3.5 h-3.5 text-[#059669]" />
+              <span className="text-[11px] font-medium">Barcode PNG</span>
+            </button>
+          )}
 
           <button
             onClick={handleCopyLink}
@@ -135,8 +225,8 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ batteryId, onClose, on
             }`}
             title={t.qrCopyLink}
           >
-            {copied ? <Check className="w-4 h-4 text-[#059669]" /> : <Copy className="w-4 h-4 text-[#64748B] dark:text-[#94A3B8]" />}
-            <span className="text-[11px] font-medium">{copied ? t.qrLinkCopied : t.qrCopyLink}</span>
+            {copied ? <Check className="w-3.5 h-3.5 text-[#059669]" /> : <Copy className="w-3.5 h-3.5 text-[#64748B] dark:text-[#94A3B8]" />}
+            <span className="text-[11px] font-medium">{copied ? t.qrLinkCopied : 'Copy Link'}</span>
           </button>
 
           <button
@@ -144,7 +234,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({ batteryId, onClose, on
             className="flex flex-col sm:flex-row items-center justify-center space-y-1 sm:space-y-0 sm:space-x-1.5 py-2.5 px-2 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] hover:bg-[#ECFDF3] dark:hover:bg-[#1F382B] text-[#1F2937] dark:text-[#F1F5F9] text-xs font-semibold border border-[#E5E7EB] dark:border-[#1E382B] hover:border-[#14532D] transition-all"
             title={t.qrPrintSticker}
           >
-            <Printer className="w-4 h-4 text-[#14532D] dark:text-[#34D399]" />
+            <Printer className="w-3.5 h-3.5 text-[#14532D] dark:text-[#34D399]" />
             <span className="text-[11px] font-medium">{t.qrPrintSticker}</span>
           </button>
         </div>

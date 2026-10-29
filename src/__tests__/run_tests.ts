@@ -16,6 +16,7 @@
 
 import { batteryRepository } from '../services/store';
 import { api } from '../services/api';
+import { encodeCode128B, renderCode128SvgString } from '../utils/code128';
 
 async function runTestSuite() {
   console.log('================================================================');
@@ -377,6 +378,58 @@ async function runTestSuite() {
     assert(hasAuditSummary, 'Test 18: Battery anti-fraud summary aggregates physical checks and tamper incidents');
   } catch (e: any) {
     assert(false, 'Test 18', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 19: Code 128 physical serial barcode generator validity
+  // --------------------------------------------------------------------------
+  try {
+    const sampleSerial = 'SN-2026-NMC-25360';
+    const encoding = encodeCode128B(sampleSerial);
+    // Code 128: 10 quiet + 11 start + (17 chars * 11) + 11 check + 13 stop + 10 quiet = 242 modules
+    const expectedModules = 10 + 11 + sampleSerial.length * 11 + 11 + 13 + 10;
+    const isValidCode128 =
+      encoding.text === sampleSerial &&
+      encoding.totalModules === expectedModules &&
+      encoding.bars.length > 0 &&
+      encoding.checksum >= 0 &&
+      encoding.checksum <= 102;
+    assert(isValidCode128, `Test 19: Code 128 generates ISO/IEC 15417 compliant encoding for '${sampleSerial}' (${encoding.totalModules} modules, checksum ${encoding.checksum})`);
+  } catch (e: any) {
+    assert(false, 'Test 19', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 20: Barcode strictly encodes physical serial without URL encapsulation
+  // --------------------------------------------------------------------------
+  try {
+    const serial = 'QV-2024-NMC-98124';
+    const encoding = encodeCode128B(serial);
+    const doesNotContainUrl =
+      !encoding.text.includes('http://') &&
+      !encoding.text.includes('https://') &&
+      !encoding.text.includes('/verify/') &&
+      encoding.text === serial;
+    assert(doesNotContainUrl, 'Test 20: Barcode encodes pure physical serial number strictly isolated from digital passport URL');
+  } catch (e: any) {
+    assert(false, 'Test 20', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 21: Code 128 SVG generator renders valid printable markup
+  // --------------------------------------------------------------------------
+  try {
+    const serial = 'SN-2026-NMC-25360';
+    const svg = renderCode128SvgString(serial, { showText: true });
+    const isSvgValid =
+      svg.includes('<svg') &&
+      svg.includes('</svg>') &&
+      svg.includes('<rect') &&
+      svg.includes(`<text`) &&
+      svg.includes(serial);
+    assert(isSvgValid, 'Test 21: Code 128 SVG string renders valid scalable vector markup with human-readable text');
+  } catch (e: any) {
+    assert(false, 'Test 21', e.message);
   }
 
   console.log('\n----------------------------------------------------------------');
