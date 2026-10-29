@@ -213,6 +213,7 @@ const MainApp: React.FC = () => {
         <main className="flex-1">
           <VerifyPublic
             initialId={selectedBatteryId}
+            activeRole={activeRole}
             onNavigateDetail={(id) => {
               setSelectedBatteryId(id);
               setCurrentTab('detail');
@@ -322,6 +323,7 @@ const MainApp: React.FC = () => {
           {currentTab === 'verify' && (
             <VerifyPublic
               initialId={selectedBatteryId}
+              activeRole={activeRole}
               onNavigateDetail={(id) => {
                 setSelectedBatteryId(id);
                 setCurrentTab('detail');

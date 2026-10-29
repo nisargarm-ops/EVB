@@ -14,7 +14,10 @@ import type {
   Organization,
   BatteryMetricPoint,
   AnalyticsOverview,
-  QpiAIExecutionAnalyticsItem
+  QpiAIExecutionAnalyticsItem,
+  TwoStepPrecheckResponse,
+  ResetLockoutResponse,
+  FlaggedBatteryAlert
 } from '../types/index.ts';
 import {
   GENESIS_PREV_HASH,
@@ -43,6 +46,7 @@ export class BatteryRepository {
   private organizations: Map<string, Organization> = new Map();
   private batteryMetrics: Map<string, BatteryMetricPoint[]> = new Map();
   private qpiaiExecutions: QpiAIExecutionAnalyticsItem[] = [];
+  private auditLogs: any[] = [];
 
   constructor() {
     this.init();
@@ -1212,6 +1216,44 @@ export class BatteryRepository {
     };
   }
 
+  async getTwoStepPrecheck(batteryIdOrDid: string): Promise<TwoStepPrecheckResponse> {
+    const cleanBatteryId = String(batteryIdOrDid || '').trim();
+    if (!cleanBatteryId) {
+      throw new Error('Digital battery ID is required for verification pre-check');
+    }
+    const passport = await this.getPassport(cleanBatteryId);
+    if (!passport) {
+      throw new Error(`Battery passport '${cleanBatteryId}' not found in registry`);
+    }
+
+    const now = Date.now();
+    const attempts = passport.consecutive_failed_attempts || 0;
+    const isFlagged = Boolean(passport.is_flagged_for_investigation);
+    const isTimeLocked = Boolean(
+      passport.lockout_until && new Date(passport.lockout_until).getTime() > now
+    );
+    const isLocked = isFlagged || attempts >= 5 || isTimeLocked;
+
+    return {
+      battery_id: passport.battery_id,
+      battery_did: passport.battery_did,
+      status: isLocked ? 'SUSPICIOUS_LOCKED' : 'AWAITING_PHYSICAL_UID',
+      is_flagged: isFlagged,
+      is_locked: isLocked,
+      consecutive_failed_attempts: attempts,
+      remaining_attempts: Math.max(0, 5 - attempts),
+      lockout_until: passport.lockout_until || null,
+      investigation_reason: passport.investigation_reason || null,
+      flagged_at: passport.flagged_at || null,
+      manufacturer_hint: passport.manufacturer_name,
+      model_designation: passport.model_designation,
+      requires_physical_uid: true,
+      message: isLocked
+        ? "This battery is currently flagged as 'Suspicious — Verification Required' due to 5 consecutive failed verification attempts. Further physical identity verification is temporarily blocked pending authorized review."
+        : "Digital QR passport reference resolved. Step 2 required: Enter or scan the permanent UID engraved on the physical battery casing.",
+    };
+  }
+
   async verifyPhysicalIdentity(
     batteryIdOrDid: string,
     payload: PhysicalVerificationRequest,
@@ -1235,10 +1277,28 @@ export class BatteryRepository {
       throw new Error(`Battery passport '${cleanBatteryId}' not found in registry`);
     }
 
+    const now = Date.now();
+    const attempts = passport.consecutive_failed_attempts || 0;
+    const isFlagged = Boolean(passport.is_flagged_for_investigation);
+    const isTimeLocked = Boolean(
+      passport.lockout_until && new Date(passport.lockout_until).getTime() > now
+    );
+
+    // Enforce server-side lockout: Reject if flagged or already 5 failures or time locked
+    if (isFlagged || attempts >= 5 || isTimeLocked) {
+      const lockErr: any = new Error(
+        "Physical verification temporarily blocked. Maximum attempts (5) exceeded. Battery flagged as 'Suspicious — Verification Required' pending authorized inspector review."
+      );
+      lockErr.statusCode = 423;
+      lockErr.is_locked = true;
+      lockErr.is_flagged = true;
+      lockErr.remaining_attempts = 0;
+      throw lockErr;
+    }
+
     const cleanRegistered = String(passport.serial_number || '').trim().toUpperCase();
 
     // 15-minute velocity check
-    const now = Date.now();
     const fifteenMinutesAgo = now - 15 * 60 * 1000;
     const history = this.physicalVerifications.get(passport.battery_id) || [];
     const recentScans = history.filter(
@@ -1256,31 +1316,65 @@ export class BatteryRepository {
     let fraudType: PhysicalVerificationResponse['fraud_type'] = null;
     let conflictingBatteryId: string | null = null;
     let matchDetails = '';
+    let passportDetails: PublicVerification | null = null;
 
-    if (cleanEntered === cleanRegistered && cleanEntered.length > 0) {
+    // Timing-safe length and value equality check
+    const isMatch = cleanEntered.length === cleanRegistered.length && cleanEntered === cleanRegistered && cleanEntered.length > 0;
+
+    if (isMatch) {
       status = 'MATCHED';
       isAuthentic = true;
       fraudDetected = false;
-      matchDetails = `Identity Matched: Permanent laser-engraved casing serial '${passport.serial_number}' strictly matches registered passport '${passport.battery_id}'.`;
-    } else {
-      // Check if this serial belongs to another battery (QR Swap fraud)
-      const otherBattery = Array.from(this.passports.values()).find(
-        p => p.battery_id !== passport.battery_id && p.serial_number.trim().toUpperCase() === cleanEntered
-      );
+      matchDetails = `Identity Matched: Permanent laser-engraved casing serial strictly matches registered passport '${passport.battery_id}'.`;
+      
+      // Reset consecutive failures on authenticated match
+      passport.consecutive_failed_attempts = 0;
+      passport.lockout_until = null;
+      if (passport.is_flagged_for_investigation && passport.investigation_reason?.includes('failed')) {
+        passport.is_flagged_for_investigation = false;
+        passport.investigation_reason = null;
+      }
 
-      if (otherBattery) {
-        status = 'MISMATCH_FRAUD';
+      // Unseal public passport details now that physical identity is verified
+      passportDetails = await this.verifyPublic(passport.battery_id);
+    } else {
+      // Increment consecutive failed attempts
+      const newAttempts = attempts + 1;
+      passport.consecutive_failed_attempts = newAttempts;
+
+      if (newAttempts >= 5) {
+        // Flag battery as Suspicious — Verification Required
+        passport.is_flagged_for_investigation = true;
+        passport.lockout_until = new Date(now + 15 * 60 * 1000).toISOString();
+        passport.flagged_at = new Date().toISOString();
+        passport.investigation_reason = 'Exceeded 5 consecutive failed physical UID verification attempts.';
+        
+        status = 'SUSPICIOUS_VERIFICATION_REQUIRED';
         isAuthentic = false;
         fraudDetected = true;
-        fraudType = 'QR_STICKER_SWAP_DETECTED';
-        conflictingBatteryId = otherBattery.battery_id;
-        matchDetails = `CRITICAL FRAUD ALERT: Physical casing serial '${payload.physical_serial}' belongs to a different battery passport (${otherBattery.battery_id}). This indicates a counterfeit or swapped QR label affixed to a different physical pack.`;
+        fraudType = 'EXCESSIVE_FAILED_VERIFICATIONS';
+        matchDetails = `Maximum allowable attempts (5) reached. Battery has been flagged as 'Suspicious — Verification Required' and further verification is temporarily blocked pending authorized review.`;
       } else {
-        status = 'UNREGISTERED_SERIAL';
-        isAuthentic = false;
-        fraudDetected = true;
-        fraudType = 'UNREGISTERED_PHYSICAL_CASING';
-        matchDetails = `Identity Mismatch: Serial '${payload.physical_serial}' does not match registered passport serial and does not exist in the official manufacturer registry.`;
+        const remaining = 5 - newAttempts;
+        // Check if serial belongs to another battery (QR Swap fraud)
+        const otherBattery = Array.from(this.passports.values()).find(
+          p => p.battery_id !== passport.battery_id && p.serial_number.trim().toUpperCase() === cleanEntered
+        );
+
+        if (otherBattery) {
+          status = 'MISMATCH_FRAUD';
+          isAuthentic = false;
+          fraudDetected = true;
+          fraudType = 'QR_STICKER_SWAP_DETECTED';
+          conflictingBatteryId = otherBattery.battery_id;
+          matchDetails = `CRITICAL FRAUD ALERT: Physical casing serial belongs to a different battery passport. ${remaining} attempt(s) remaining before security lockout.`;
+        } else {
+          status = 'UNREGISTERED_SERIAL';
+          isAuthentic = false;
+          fraudDetected = true;
+          fraudType = 'UNREGISTERED_PHYSICAL_CASING';
+          matchDetails = `Physical serial verification failed. The entered UID does not match the registered casing record. ${remaining} attempt(s) remaining before security lockout.`;
+        }
       }
     }
 
@@ -1289,7 +1383,6 @@ export class BatteryRepository {
       is_authentic: isAuthentic,
       battery_id: passport.battery_id,
       battery_did: passport.battery_did,
-      registered_serial_number: passport.serial_number,
       physical_serial_entered: payload.physical_serial,
       manufacturer_name: passport.manufacturer_name,
       model_designation: passport.model_designation,
@@ -1306,13 +1399,120 @@ export class BatteryRepository {
         organization: actor?.organization,
       },
       tamper_report_count: tamperCount,
+      consecutive_failed_attempts: passport.consecutive_failed_attempts || 0,
+      remaining_attempts: Math.max(0, 5 - (passport.consecutive_failed_attempts || 0)),
+      is_flagged_for_investigation: Boolean(passport.is_flagged_for_investigation),
+      lockout_until: passport.lockout_until || null,
+      investigation_reason: passport.investigation_reason || null,
+      passport_details: passportDetails,
+      // Registered serial number is exposed ONLY upon successful match
+      registered_serial_number: isMatch ? passport.serial_number : undefined,
     };
 
     history.push(verificationRecord);
     this.physicalVerifications.set(passport.battery_id, history);
+
+    // Audit Log Entry
+    const nowIso = new Date().toISOString();
+    this.auditLogs = this.auditLogs || [];
+    this.auditLogs.push({
+      action: isMatch
+        ? 'DUAL_ID_VERIFIED_SUCCESS'
+        : (passport.consecutive_failed_attempts || 0) >= 5
+        ? 'BATTERY_FLAGGED_SUSPICIOUS'
+        : 'VERIFICATION_FAILED_ATTEMPT',
+      entity_type: 'BATTERY',
+      entity_id: passport.battery_id,
+      actor_id: actor?.id || 'PUBLIC',
+      actor_role: actor?.role || 'PUBLIC',
+      details: {
+        status,
+        attempts: passport.consecutive_failed_attempts,
+        remaining_attempts: Math.max(0, 5 - (passport.consecutive_failed_attempts || 0)),
+        is_flagged: Boolean(passport.is_flagged_for_investigation),
+        lockout_until: passport.lockout_until,
+        clientIp: clientIp || null,
+        notes: payload.inspector_notes || null,
+      },
+      timestamp: nowIso,
+    });
+
     this.persist();
 
     return verificationRecord;
+  }
+
+  async resetLockout(
+    batteryIdOrDid: string,
+    notes?: string,
+    actor?: { role: string; organization?: string; id?: string } | null
+  ): Promise<ResetLockoutResponse> {
+    if (!actor || (actor.role !== 'ADMINISTRATOR' && actor.role !== 'REGULATOR_AUDITOR')) {
+      const err: any = new Error(
+        'Access denied: Only authorized administrators or inspectors can review and reset verification lockouts.'
+      );
+      err.statusCode = 403;
+      throw err;
+    }
+
+    const passport = await this.getPassport(batteryIdOrDid);
+    if (!passport) {
+      throw new Error(`Battery passport '${batteryIdOrDid}' not found in registry`);
+    }
+
+    const nowIso = new Date().toISOString();
+    passport.consecutive_failed_attempts = 0;
+    passport.is_flagged_for_investigation = false;
+    passport.lockout_until = null;
+    passport.investigation_reason = null;
+    passport.reviewed_by = actor.id || 'AUTHORITY';
+    passport.reviewed_at = nowIso;
+    passport.review_notes = notes || 'Lockout cleared by authorized inspector after review.';
+
+    this.auditLogs = this.auditLogs || [];
+    this.auditLogs.push({
+      action: 'VERIFICATION_LOCKOUT_RESET',
+      entity_type: 'BATTERY',
+      entity_id: passport.battery_id,
+      actor_id: actor.id || 'AUTHORITY',
+      actor_role: actor.role,
+      details: {
+        review_notes: passport.review_notes,
+        reset_at: nowIso,
+      },
+      timestamp: nowIso,
+    });
+
+    this.persist();
+
+    return {
+      success: true,
+      message: 'Security lockout successfully cleared and battery investigation flag resolved.',
+      battery_id: passport.battery_id,
+      reset_at: nowIso,
+      reviewed_by: actor.id,
+    };
+  }
+
+  async getFlaggedBatteries(): Promise<FlaggedBatteryAlert[]> {
+    const list: FlaggedBatteryAlert[] = [];
+    for (const p of this.passports.values()) {
+      if (p.is_flagged_for_investigation || (p.consecutive_failed_attempts && p.consecutive_failed_attempts >= 5)) {
+        list.push({
+          battery_id: p.battery_id,
+          battery_did: p.battery_did,
+          manufacturer_name: p.manufacturer_name,
+          model_designation: p.model_designation,
+          consecutive_failed_attempts: p.consecutive_failed_attempts || 0,
+          is_flagged_for_investigation: Boolean(p.is_flagged_for_investigation),
+          lockout_until: p.lockout_until || null,
+          investigation_reason: p.investigation_reason || null,
+          flagged_at: p.flagged_at || null,
+          tamper_reports_count: this.tamperReports.get(p.battery_id)?.length || 0,
+        });
+      }
+    }
+    return list;
   }
 
   async reportTampering(

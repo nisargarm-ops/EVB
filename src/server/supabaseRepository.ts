@@ -22,6 +22,9 @@ import type {
   BatteryMetricPoint,
   AnalyticsOverview,
   QpiAIExecutionAnalyticsItem,
+  TwoStepPrecheckResponse,
+  ResetLockoutResponse,
+  FlaggedBatteryAlert,
 } from '../types/index.ts';
 import {
   GENESIS_PREV_HASH,
@@ -2198,6 +2201,49 @@ export class SupabaseBackendRepository {
     };
   }
 
+  async getTwoStepPrecheck(batteryIdOrDid: string): Promise<TwoStepPrecheckResponse> {
+    const cleanBatteryId = String(batteryIdOrDid || '').trim();
+    if (!cleanBatteryId) {
+      throw new DomainError('Digital battery ID is required for verification pre-check.', 400);
+    }
+
+    if (!this.isConfigured()) {
+      return batteryRepository.getTwoStepPrecheck(cleanBatteryId);
+    }
+
+    const row = await this.findRawBatteryRow(cleanBatteryId);
+    if (!row) {
+      throw new DomainError(`Battery passport '${cleanBatteryId}' not found.`, 404);
+    }
+
+    const now = Date.now();
+    const attempts = row.consecutive_failed_attempts || 0;
+    const isFlagged = Boolean(row.is_flagged_for_investigation);
+    const isTimeLocked = Boolean(
+      row.lockout_until && new Date(row.lockout_until).getTime() > now
+    );
+    const isLocked = isFlagged || attempts >= 5 || isTimeLocked;
+
+    return {
+      battery_id: row.battery_id,
+      battery_did: row.battery_did,
+      status: isLocked ? 'SUSPICIOUS_LOCKED' : 'AWAITING_PHYSICAL_UID',
+      is_flagged: isFlagged,
+      is_locked: isLocked,
+      consecutive_failed_attempts: attempts,
+      remaining_attempts: Math.max(0, 5 - attempts),
+      lockout_until: row.lockout_until || null,
+      investigation_reason: row.investigation_reason || null,
+      flagged_at: row.flagged_at || null,
+      manufacturer_hint: row.manufacturer_name || 'Authorized OEM',
+      model_designation: row.model_designation || undefined,
+      requires_physical_uid: true,
+      message: isLocked
+        ? "This battery is currently flagged as 'Suspicious — Verification Required' due to 5 consecutive failed verification attempts. Further physical identity verification is temporarily blocked pending authorized review."
+        : "Digital QR passport reference resolved. Step 2 required: Enter or scan the permanent UID engraved on the physical battery casing.",
+    };
+  }
+
   async verifyPhysicalIdentity(
     batteryIdOrDid: string,
     payload: PhysicalVerificationRequest,
@@ -2230,13 +2276,28 @@ export class SupabaseBackendRepository {
       throw new DomainError(`Battery passport '${cleanBatteryId}' not found.`, 404);
     }
 
+    const now = Date.now();
+    const attempts = row.consecutive_failed_attempts || 0;
+    const isFlagged = Boolean(row.is_flagged_for_investigation);
+    const isTimeLocked = Boolean(
+      row.lockout_until && new Date(row.lockout_until).getTime() > now
+    );
+
+    // Enforce server-side lockout: Reject if flagged or already 5 failures or time locked
+    if (isFlagged || attempts >= 5 || isTimeLocked) {
+      throw new DomainError(
+        "Physical verification temporarily blocked. Maximum attempts (5) exceeded. Battery flagged as 'Suspicious — Verification Required' pending authorized inspector review.",
+        423
+      );
+    }
+
     const passport = await this.getPassport(row.battery_id);
     const db = this.getAdminClient();
 
     const cleanRegistered = String(row.serial_number || '').trim().toUpperCase();
 
     // 15-minute velocity check on verification_results
-    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const fifteenMinutesAgo = new Date(now - 15 * 60 * 1000).toISOString();
     const { data: recentAttempts } = await db
       .from('verification_results')
       .select('id, verified_at')
@@ -2262,34 +2323,89 @@ export class SupabaseBackendRepository {
     let fraudType: PhysicalVerificationResponse['fraud_type'] = null;
     let conflictingBatteryId: string | null = null;
     let matchDetails = '';
+    let passportDetails: PublicVerification | null = null;
 
-    if (cleanEntered === cleanRegistered && cleanEntered.length > 0) {
+    const isMatch = cleanEntered.length === cleanRegistered.length && cleanEntered === cleanRegistered && cleanEntered.length > 0;
+
+    if (isMatch) {
       status = 'MATCHED';
       isAuthentic = true;
       fraudDetected = false;
       matchDetails = `Identity Matched: Permanent laser-engraved casing serial '${row.serial_number}' strictly matches registered passport '${row.battery_id}'.`;
-    } else {
-      // Check if serial belongs to any other battery (QR Sticker Swap detection)
-      const { data: otherBattery } = await db
-        .from('batteries')
-        .select('id, battery_id, serial_number')
-        .ilike('serial_number', cleanEntered)
-        .neq('id', row.id)
-        .maybeSingle();
 
-      if (otherBattery) {
-        status = 'MISMATCH_FRAUD';
+      // Reset failure counter in database
+      try {
+        await db
+          .from('batteries')
+          .update({
+            consecutive_failed_attempts: 0,
+            lockout_until: null,
+            is_flagged_for_investigation: false,
+          })
+          .eq('id', row.id);
+      } catch (e) {
+        console.warn('Non-fatal: could not reset consecutive_failed_attempts in Supabase', e);
+      }
+
+      // Unseal passport details on authenticated physical match
+      passportDetails = await this.verifyPublic(row.battery_id);
+    } else {
+      const newAttempts = attempts + 1;
+
+      if (newAttempts >= 5) {
+        status = 'SUSPICIOUS_VERIFICATION_REQUIRED';
         isAuthentic = false;
         fraudDetected = true;
-        fraudType = 'QR_STICKER_SWAP_DETECTED';
-        conflictingBatteryId = otherBattery.battery_id;
-        matchDetails = `CRITICAL FRAUD ALERT: Physical casing serial '${payload.physical_serial}' belongs to a different battery passport (${otherBattery.battery_id}). This indicates a counterfeit or swapped QR label affixed to a different physical pack.`;
+        fraudType = 'EXCESSIVE_FAILED_VERIFICATIONS';
+        matchDetails = `Maximum allowable attempts (5) reached. Battery has been flagged as 'Suspicious — Verification Required' and further verification is temporarily blocked pending authorized review.`;
+
+        try {
+          await db
+            .from('batteries')
+            .update({
+              consecutive_failed_attempts: newAttempts,
+              is_flagged_for_investigation: true,
+              lockout_until: new Date(now + 15 * 60 * 1000).toISOString(),
+              flagged_at: new Date().toISOString(),
+              investigation_reason: 'Exceeded 5 consecutive failed physical UID verification attempts.',
+            })
+            .eq('id', row.id);
+        } catch (e) {
+          console.warn('Non-fatal: could not flag battery in Supabase', e);
+        }
       } else {
-        status = 'UNREGISTERED_SERIAL';
-        isAuthentic = false;
-        fraudDetected = true;
-        fraudType = 'UNREGISTERED_PHYSICAL_CASING';
-        matchDetails = `Identity Mismatch: Serial '${payload.physical_serial}' does not match registered passport serial and does not exist in the official manufacturer database.`;
+        const remaining = 5 - newAttempts;
+        // Check if serial belongs to any other battery (QR Sticker Swap detection)
+        const { data: otherBattery } = await db
+          .from('batteries')
+          .select('id, battery_id, serial_number')
+          .ilike('serial_number', cleanEntered)
+          .neq('id', row.id)
+          .maybeSingle();
+
+        if (otherBattery) {
+          status = 'MISMATCH_FRAUD';
+          isAuthentic = false;
+          fraudDetected = true;
+          fraudType = 'QR_STICKER_SWAP_DETECTED';
+          conflictingBatteryId = otherBattery.battery_id;
+          matchDetails = `CRITICAL FRAUD ALERT: Physical casing serial belongs to a different battery passport (${otherBattery.battery_id}). ${remaining} attempt(s) remaining before security lockout.`;
+        } else {
+          status = 'UNREGISTERED_SERIAL';
+          isAuthentic = false;
+          fraudDetected = true;
+          fraudType = 'UNREGISTERED_PHYSICAL_CASING';
+          matchDetails = `Physical serial verification failed. The entered UID does not match the registered casing record. ${remaining} attempt(s) remaining before security lockout.`;
+        }
+
+        try {
+          await db
+            .from('batteries')
+            .update({ consecutive_failed_attempts: newAttempts })
+            .eq('id', row.id);
+        } catch (e) {
+          console.warn('Non-fatal: could not update consecutive_failed_attempts in Supabase', e);
+        }
       }
     }
 
@@ -2316,7 +2432,7 @@ export class SupabaseBackendRepository {
         error_details: isAuthentic ? null : matchDetails,
         metadata: {
           physical_serial_entered: payload.physical_serial,
-          registered_serial: row.serial_number,
+          registered_serial: isMatch ? row.serial_number : undefined,
           match_status: status,
           fraud_detected: fraudDetected,
           fraud_type: fraudType,
@@ -2335,7 +2451,11 @@ export class SupabaseBackendRepository {
     // Append security audit log
     try {
       await db.from('audit_logs').insert({
-        action: status === 'MATCHED' ? 'DUAL_ID_VERIFIED_SUCCESS' : 'DUAL_ID_VERIFIED_FRAUD_ALERT',
+        action: isMatch
+          ? 'DUAL_ID_VERIFIED_SUCCESS'
+          : status === 'SUSPICIOUS_VERIFICATION_REQUIRED'
+          ? 'BATTERY_FLAGGED_SUSPICIOUS'
+          : 'VERIFICATION_FAILED_ATTEMPT',
         entity_type: 'BATTERY',
         entity_id: row.battery_id,
         actor_id: profileUuid,
@@ -2345,7 +2465,7 @@ export class SupabaseBackendRepository {
           status,
           fraud_detected: fraudDetected,
           entered_serial: cleanEntered,
-          registered_serial: row.serial_number,
+          registered_serial: isMatch ? row.serial_number : undefined,
           conflicting_battery_id: conflictingBatteryId,
           suspicious_repeated_scans: suspiciousRepeatedScans,
           inspector_notes: payload.inspector_notes || null,
@@ -2361,7 +2481,6 @@ export class SupabaseBackendRepository {
       is_authentic: isAuthentic,
       battery_id: row.battery_id,
       battery_did: row.battery_did,
-      registered_serial_number: row.serial_number,
       physical_serial_entered: payload.physical_serial,
       manufacturer_name: passport.manufacturer_name,
       model_designation: passport.model_designation,
@@ -2378,7 +2497,114 @@ export class SupabaseBackendRepository {
         organization: actor?.organization_name,
       },
       tamper_report_count: tamperCount,
+      consecutive_failed_attempts: isMatch ? 0 : (attempts + 1),
+      remaining_attempts: isMatch ? 5 : Math.max(0, 5 - (attempts + 1)),
+      is_flagged_for_investigation: !isMatch && (attempts + 1) >= 5,
+      passport_details: passportDetails,
+      registered_serial_number: isMatch ? row.serial_number : undefined,
     };
+  }
+
+  async resetLockout(
+    batteryIdOrDid: string,
+    notes?: string,
+    actor?: AuthenticatedActor | null
+  ): Promise<ResetLockoutResponse> {
+    if (!actor || (actor.role !== 'ADMINISTRATOR' && actor.role !== 'REGULATOR_AUDITOR')) {
+      throw new DomainError(
+        'Access denied: Only authorized administrators or inspectors can review and reset verification lockouts.',
+        403
+      );
+    }
+
+    if (!this.isConfigured()) {
+      return batteryRepository.resetLockout(
+        batteryIdOrDid,
+        notes,
+        actor ? actorToProfile(actor) : null
+      );
+    }
+
+    const row = await this.findRawBatteryRow(batteryIdOrDid);
+    if (!row) {
+      throw new DomainError(`Battery passport '${batteryIdOrDid}' not found.`, 404);
+    }
+
+    const db = this.getAdminClient();
+    const nowIso = new Date().toISOString();
+    let profileUuid: string | null = null;
+    try {
+      profileUuid = await this.resolveValidProfileUuid(actor);
+    } catch {
+      profileUuid = null;
+    }
+
+    await db
+      .from('batteries')
+      .update({
+        consecutive_failed_attempts: 0,
+        is_flagged_for_investigation: false,
+        lockout_until: null,
+        investigation_reason: null,
+        review_notes: notes || 'Lockout cleared by authorized inspector after review.',
+        reviewed_by: profileUuid,
+        reviewed_at: nowIso,
+      })
+      .eq('id', row.id);
+
+    try {
+      await db.from('audit_logs').insert({
+        action: 'VERIFICATION_LOCKOUT_RESET',
+        entity_type: 'BATTERY',
+        entity_id: row.battery_id,
+        actor_id: profileUuid,
+        actor_role: actor.role,
+        details: {
+          notes: notes || 'Lockout cleared by authorized inspector after review.',
+          reset_at: nowIso,
+        },
+        timestamp: nowIso,
+      });
+    } catch (e) {
+      console.warn('Non-fatal: could not log lockout reset to Supabase audit_logs', e);
+    }
+
+    return {
+      success: true,
+      message: 'Security lockout successfully cleared and battery investigation flag resolved.',
+      battery_id: row.battery_id,
+      reset_at: nowIso,
+      reviewed_by: actor.id,
+    };
+  }
+
+  async getFlaggedBatteries(actor?: AuthenticatedActor | null): Promise<FlaggedBatteryAlert[]> {
+    if (!this.isConfigured()) {
+      return batteryRepository.getFlaggedBatteries();
+    }
+
+    const db = this.getAdminClient();
+    const { data: rows } = await db
+      .from('batteries')
+      .select('id, battery_id, battery_did, manufacturer_name, model_designation, consecutive_failed_attempts, is_flagged_for_investigation, lockout_until, investigation_reason, flagged_at')
+      .or('is_flagged_for_investigation.eq.true,consecutive_failed_attempts.gte.5');
+
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+
+    return rows.map((r: any) => ({
+      battery_id: r.battery_id,
+      battery_did: r.battery_did,
+      manufacturer_name: r.manufacturer_name,
+      model_designation: r.model_designation,
+      consecutive_failed_attempts: r.consecutive_failed_attempts || 0,
+      is_flagged_for_investigation: Boolean(r.is_flagged_for_investigation),
+      lockout_until: r.lockout_until || null,
+      investigation_reason: r.investigation_reason || null,
+      flagged_at: r.flagged_at || null,
+      tamper_reports_count: 0,
+    }));
   }
 
   async reportTampering(

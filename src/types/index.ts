@@ -105,6 +105,14 @@ export interface BatteryPassport {
   qr_code_url: string;
   created_at: string;
   updated_at: string;
+  consecutive_failed_attempts?: number;
+  is_flagged_for_investigation?: boolean;
+  lockout_until?: string | null;
+  investigation_reason?: string | null;
+  flagged_at?: string | null;
+  review_notes?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
 }
 
 export interface PassportSummary {
@@ -187,7 +195,8 @@ export type DualIdVerificationStatus =
   | 'MATCHED'
   | 'MISMATCH_FRAUD'
   | 'UNREGISTERED_SERIAL'
-  | 'PENDING_INSPECTION';
+  | 'PENDING_INSPECTION'
+  | 'SUSPICIOUS_VERIFICATION_REQUIRED';
 
 export interface PhysicalVerificationRequest {
   physical_serial: string;
@@ -197,17 +206,17 @@ export interface PhysicalVerificationRequest {
 }
 
 export interface PhysicalVerificationResponse {
-  status: 'MATCHED' | 'MISMATCH_FRAUD' | 'UNREGISTERED_SERIAL';
+  status: 'MATCHED' | 'MISMATCH_FRAUD' | 'UNREGISTERED_SERIAL' | 'SUSPICIOUS_VERIFICATION_REQUIRED';
   is_authentic: boolean;
   battery_id: string;
   battery_did: string;
-  registered_serial_number: string;
+  registered_serial_number?: string;
   physical_serial_entered: string;
   manufacturer_name: string;
   model_designation: string;
   match_details: string;
   fraud_detected: boolean;
-  fraud_type?: 'QR_STICKER_SWAP_DETECTED' | 'UNREGISTERED_PHYSICAL_CASING' | null;
+  fraud_type?: 'QR_STICKER_SWAP_DETECTED' | 'UNREGISTERED_PHYSICAL_CASING' | 'EXCESSIVE_FAILED_VERIFICATIONS' | null;
   conflicting_battery_id?: string | null;
   suspicious_repeated_scans: boolean;
   recent_scan_count_15m: number;
@@ -218,6 +227,55 @@ export interface PhysicalVerificationResponse {
     organization?: string;
   };
   tamper_report_count: number;
+  consecutive_failed_attempts?: number;
+  remaining_attempts?: number;
+  is_flagged_for_investigation?: boolean;
+  lockout_until?: string | null;
+  investigation_reason?: string | null;
+  passport_details?: PublicVerification | null;
+}
+
+export interface TwoStepPrecheckResponse {
+  battery_id: string;
+  battery_did: string;
+  status: 'AWAITING_PHYSICAL_UID' | 'SUSPICIOUS_LOCKED';
+  is_flagged: boolean;
+  is_locked: boolean;
+  consecutive_failed_attempts: number;
+  remaining_attempts: number;
+  lockout_until?: string | null;
+  investigation_reason?: string | null;
+  flagged_at?: string | null;
+  manufacturer_hint?: string;
+  model_designation?: string;
+  requires_physical_uid: true;
+  message: string;
+}
+
+export interface ResetLockoutRequest {
+  review_notes?: string;
+}
+
+export interface ResetLockoutResponse {
+  success: boolean;
+  message: string;
+  battery_id: string;
+  reset_at: string;
+  reviewed_by?: string;
+}
+
+export interface FlaggedBatteryAlert {
+  battery_id: string;
+  battery_did: string;
+  manufacturer_name: string;
+  model_designation: string;
+  consecutive_failed_attempts: number;
+  is_flagged_for_investigation: boolean;
+  lockout_until?: string | null;
+  investigation_reason?: string | null;
+  flagged_at?: string | null;
+  tamper_reports_count: number;
+  last_attempt_at?: string;
 }
 
 export interface TamperReportRequest {

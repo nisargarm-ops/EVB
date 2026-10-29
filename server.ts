@@ -432,6 +432,26 @@ async function startServer() {
     }
   });
 
+  // Secure Two-Step Battery Verification: Step 1 QR Reference Pre-Check
+  // Never leaks physical UID/serial number, BMS health, or confidential specs before Step 2 match
+  apiRouter.get('/verify/:batteryId/precheck', async (req: Request, res: Response) => {
+    try {
+      const pre = await supabaseBackendRepo.getTwoStepPrecheck(String(req.params.batteryId));
+      res.json(pre);
+    } catch (err) {
+      sendError(res, err, 'Failed to resolve battery verification pre-check');
+    }
+  });
+
+  apiRouter.get('/verify/:batteryId/session', async (req: Request, res: Response) => {
+    try {
+      const pre = await supabaseBackendRepo.getTwoStepPrecheck(String(req.params.batteryId));
+      res.json(pre);
+    } catch (err) {
+      sendError(res, err, 'Failed to resolve battery verification session');
+    }
+  });
+
   // Dual-ID Physical Identity Cross-Verification
   apiRouter.post(
     '/verify/:batteryId/physical',
@@ -466,6 +486,39 @@ async function startServer() {
         res.json(outcome);
       } catch (err) {
         sendError(res, err, 'Failed to perform physical identity verification');
+      }
+    }
+  );
+
+  // Anti-Fraud: Authorized Review & Reset of Locked/Flagged Batteries
+  apiRouter.post(
+    '/verify/:batteryId/reset-lockout',
+    auth.requireRoles(['ADMINISTRATOR', 'REGULATOR_AUDITOR']),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { review_notes } = req.body || {};
+        const outcome = await supabaseBackendRepo.resetLockout(
+          String(req.params.batteryId),
+          review_notes,
+          req.actor!
+        );
+        res.json(outcome);
+      } catch (err) {
+        sendError(res, err, 'Failed to reset battery verification lockout');
+      }
+    }
+  );
+
+  // Anti-Fraud: Security Alert List of Flagged Batteries
+  apiRouter.get(
+    '/verify/alerts/flagged',
+    auth.requireRoles(['ADMINISTRATOR', 'REGULATOR_AUDITOR', 'MANUFACTURER']),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const flagged = await supabaseBackendRepo.getFlaggedBatteries(req.actor!);
+        res.json(flagged);
+      } catch (err) {
+        sendError(res, err, 'Failed to fetch flagged battery security alerts');
       }
     }
   );

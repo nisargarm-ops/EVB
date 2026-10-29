@@ -20,6 +20,9 @@ import {
   BatteryMetricPoint,
   AnalyticsOverview,
   QpiAIExecutionAnalyticsItem,
+  TwoStepPrecheckResponse,
+  ResetLockoutResponse,
+  FlaggedBatteryAlert,
 } from '../types';
 import {
   supabase,
@@ -788,6 +791,15 @@ export const api = {
   // --------------------------------------------------------------------------
   // Verification & Tamper Evidence
   // --------------------------------------------------------------------------
+  async getTwoStepPrecheck(batteryId: string): Promise<TwoStepPrecheckResponse> {
+    if (isBrowserRuntime) {
+      return backendFetch<TwoStepPrecheckResponse>(
+        `/verify/${encodeURIComponent(batteryId)}/precheck`
+      );
+    }
+    return batteryRepository.getTwoStepPrecheck(batteryId);
+  },
+
   async verifyPublic(batteryId: string): Promise<PublicVerification> {
     if (isBrowserRuntime) {
       return backendFetch<PublicVerification>(`/verify/${encodeURIComponent(batteryId)}`);
@@ -809,6 +821,37 @@ export const api = {
       );
     }
     return batteryRepository.verifyPhysicalIdentity(batteryId, payload);
+  },
+
+  async resetLockout(
+    batteryId: string,
+    notes?: string
+  ): Promise<ResetLockoutResponse> {
+    if (isBrowserRuntime) {
+      return backendFetch<ResetLockoutResponse>(
+        `/verify/${encodeURIComponent(batteryId)}/reset-lockout`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ review_notes: notes }),
+        },
+        true // requireToken
+      );
+    }
+    return batteryRepository.resetLockout(batteryId, notes, {
+      role: currentRole,
+      id: 'AUTHORITY',
+    });
+  },
+
+  async getFlaggedBatteries(): Promise<FlaggedBatteryAlert[]> {
+    if (isBrowserRuntime) {
+      return backendFetch<FlaggedBatteryAlert[]>(
+        `/verify/alerts/flagged`,
+        {},
+        true // requireToken
+      );
+    }
+    return batteryRepository.getFlaggedBatteries();
   },
 
   async reportTampering(

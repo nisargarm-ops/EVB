@@ -620,6 +620,162 @@ async function runTestSuite() {
     assert(false, 'Test 31', e.message);
   }
 
+  // --------------------------------------------------------------------------
+  // Test 32: Two-Step Pre-check Privacy: QR scan conceals registered serial & health
+  // --------------------------------------------------------------------------
+  try {
+    const pre = await batteryRepository.getTwoStepPrecheck('BAT-NCA-F104A7B2');
+    const isPrivacyPreserved =
+      pre.battery_id === 'BAT-NCA-F104A7B2' &&
+      pre.requires_physical_uid === true &&
+      pre.remaining_attempts === 5 &&
+      (pre as any).serial_number === undefined &&
+      (pre as any).state_of_health_pct === undefined &&
+      (pre as any).chemistry === undefined &&
+      (pre as any).carbon_footprint_total === undefined;
+    assert(isPrivacyPreserved, 'Test 32: Two-step pre-check resolves QR without leaking registered UID or health telemetry');
+  } catch (e: any) {
+    assert(false, 'Test 32', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 33: Failed physical UID attempt increments attempt counter & conceals registered UID
+  // --------------------------------------------------------------------------
+  try {
+    const fail1 = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-LFP-3C7D410E',
+      { physical_serial: 'WRONG-UID-001' }
+    );
+    const fail2 = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-LFP-3C7D410E',
+      { physical_serial: 'WRONG-UID-002' }
+    );
+    const counterWorking =
+      fail1.consecutive_failed_attempts === 1 &&
+      fail1.remaining_attempts === 4 &&
+      fail1.registered_serial_number === undefined &&
+      fail1.passport_details === null &&
+      fail2.consecutive_failed_attempts === 2 &&
+      fail2.remaining_attempts === 3 &&
+      fail2.registered_serial_number === undefined;
+    assert(counterWorking, 'Test 33: Incorrect UID increments failure counter (attempts 1 & 2) and redacts registered serial number');
+  } catch (e: any) {
+    assert(false, 'Test 33', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 34: Fifth consecutive failed attempt triggers lockout and flags battery as Suspicious
+  // --------------------------------------------------------------------------
+  try {
+    await batteryRepository.verifyPhysicalIdentity('BAT-LFP-3C7D410E', { physical_serial: 'WRONG-UID-003' });
+    await batteryRepository.verifyPhysicalIdentity('BAT-LFP-3C7D410E', { physical_serial: 'WRONG-UID-004' });
+    const fail5 = await batteryRepository.verifyPhysicalIdentity('BAT-LFP-3C7D410E', { physical_serial: 'WRONG-UID-005' });
+
+    const isLockoutTriggered =
+      fail5.status === 'SUSPICIOUS_VERIFICATION_REQUIRED' &&
+      fail5.is_flagged_for_investigation === true &&
+      fail5.consecutive_failed_attempts === 5 &&
+      fail5.remaining_attempts === 0 &&
+      Boolean(fail5.lockout_until);
+    assert(isLockoutTriggered, 'Test 34: Fifth failed UID attempt flags battery as Suspicious — Verification Required and locks further attempts');
+  } catch (e: any) {
+    assert(false, 'Test 34', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 35: Locked-out battery rejects subsequent verification attempts (Rate Limiting)
+  // --------------------------------------------------------------------------
+  try {
+    let rejectedAsLocked = false;
+    try {
+      await batteryRepository.verifyPhysicalIdentity('BAT-LFP-3C7D410E', { physical_serial: 'WRONG-UID-006' });
+    } catch (err: any) {
+      rejectedAsLocked = err.statusCode === 423 || err.is_locked === true || err.message.includes('blocked');
+    }
+    assert(rejectedAsLocked, 'Test 35: Attempt 6 on locked battery is strictly rejected with server-side rate limit lockout');
+  } catch (e: any) {
+    assert(false, 'Test 35', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 36: Server-side persistence prevents bypassing lockout by refreshing / new session
+  // --------------------------------------------------------------------------
+  try {
+    const refreshedSession = await batteryRepository.getTwoStepPrecheck('BAT-LFP-3C7D410E');
+    const isPersisted =
+      refreshedSession.status === 'SUSPICIOUS_LOCKED' &&
+      refreshedSession.is_locked === true &&
+      refreshedSession.is_flagged === true &&
+      refreshedSession.remaining_attempts === 0;
+    assert(isPersisted, 'Test 36: Server-side rate limit & lockout persists across refreshed sessions');
+  } catch (e: any) {
+    assert(false, 'Test 36', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 37: Unauthorized actor blocked from resetting security lockout (403 Forbidden)
+  // --------------------------------------------------------------------------
+  try {
+    let unauthorizedBlocked = false;
+    try {
+      await batteryRepository.resetLockout(
+        'BAT-LFP-3C7D410E',
+        'Unauthorized reset attempt',
+        { role: 'PUBLIC' } as any
+      );
+    } catch (err: any) {
+      unauthorizedBlocked = err.statusCode === 403 || err.message.includes('Access denied');
+    }
+    assert(unauthorizedBlocked, 'Test 37: Public/unauthorized users blocked from resetting security lockout (403 Forbidden)');
+  } catch (e: any) {
+    assert(false, 'Test 37', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 38: Authorized Administrator / Inspector successfully reviews and clears lockout
+  // --------------------------------------------------------------------------
+  try {
+    const resetRes = await batteryRepository.resetLockout(
+      'BAT-LFP-3C7D410E',
+      'Auditor inspected physical pack in person; verified casing integrity against OEM ledger.',
+      { role: 'REGULATOR_AUDITOR', id: 'AUDITOR-EU-01' }
+    );
+    const postReset = await batteryRepository.getTwoStepPrecheck('BAT-LFP-3C7D410E');
+    const isCleaned =
+      resetRes.success === true &&
+      postReset.is_locked === false &&
+      postReset.is_flagged === false &&
+      postReset.remaining_attempts === 5 &&
+      postReset.consecutive_failed_attempts === 0;
+    assert(isCleaned, 'Test 38: Authorized Auditor reviews audit trail and successfully clears security lockout');
+  } catch (e: any) {
+    assert(false, 'Test 38', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 39: Matching UID verifies identity, resets counter, and unseals full passport details
+  // --------------------------------------------------------------------------
+  try {
+    const matchRes = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-LFP-3C7D410E',
+      { physical_serial: 'NBS-2023-LFP-44109', barcode_type: 'LASER_ETCHED' },
+      { role: 'PUBLIC' }
+    );
+    const isPassportUnlocked =
+      matchRes.status === 'MATCHED' &&
+      matchRes.is_authentic === true &&
+      matchRes.consecutive_failed_attempts === 0 &&
+      matchRes.passport_details !== null &&
+      matchRes.passport_details !== undefined &&
+      matchRes.passport_details.chemistry.includes('LFP') &&
+      typeof matchRes.passport_details.state_of_health_pct === 'number' &&
+      typeof matchRes.passport_details.carbon_footprint_total === 'number' &&
+      matchRes.registered_serial_number === 'NBS-2023-LFP-44109';
+    assert(isPassportUnlocked, 'Test 39: Successful physical UID match verifies identity, resets failure count, and unseals passport');
+  } catch (e: any) {
+    assert(false, 'Test 39', e.message);
+  }
+
   console.log('\n----------------------------------------------------------------');
   console.log(`SUMMARY: ${passed} Passed, ${failed} Failed out of ${passed + failed} Tests`);
   console.log('----------------------------------------------------------------\n');
