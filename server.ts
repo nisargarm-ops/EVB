@@ -690,8 +690,8 @@ async function startServer() {
   }
 
   const port = 3000;
-  app.listen(port, '0.0.0.0', () => {
-    console.log(`BatteryPass 360 full-stack server listening on http://0.0.0.0:${port}`);
+  app.listen(port, 'localhost', () => {
+    console.log(`BatteryPass 360 full-stack server listening on http://localhost:${port}`);
   });
 }
 

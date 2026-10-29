@@ -33,6 +33,19 @@ export default defineConfig({
     'import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(safePubKey),
     'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(safePubKey),
   },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-icons': ['lucide-react'],
+          'vendor-qr': ['qrcode.react', 'jsqr'],
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: 3000,
