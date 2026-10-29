@@ -2,7 +2,8 @@ import dotenv from 'dotenv';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-dotenv.config({ override: true });
+// Never override existing platform environment variables
+dotenv.config({ override: false });
 
 const rawUrl = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
 const rawPubKey = (
@@ -13,8 +14,34 @@ const rawPubKey = (
   ''
 ).trim();
 
-// Never allow a server secret key (sb_secret_*) into client bundles
-const safePubKey = rawPubKey.startsWith('sb_secret_') ? '' : rawPubKey;
+function isPrivilegedSupabaseKey(candidate: string): boolean {
+  if (!candidate) return true;
+  if (candidate.startsWith('sb_secret_')) return true;
+  if (
+    process.env.SUPABASE_SECRET_KEY &&
+    candidate === process.env.SUPABASE_SECRET_KEY.trim()
+  ) {
+    return true;
+  }
+  if (
+    process.env.SUPABASE_SERVICE_ROLE_KEY &&
+    candidate === process.env.SUPABASE_SERVICE_ROLE_KEY.trim()
+  ) {
+    return true;
+  }
+  const parts = candidate.split('.');
+  if (parts.length === 3) {
+    try {
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+      if (payload?.role === 'service_role') return true;
+    } catch {
+      // ignore malformed JWT
+    }
+  }
+  return false;
+}
+
+const safePubKey = isPrivilegedSupabaseKey(rawPubKey) ? '' : rawPubKey;
 
 export default defineConfig({
   plugins: [react()],

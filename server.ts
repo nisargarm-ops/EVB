@@ -1,10 +1,10 @@
 import dotenv from 'dotenv';
-dotenv.config({ override: true });
+dotenv.config({ override: false });
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
-import type { Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import type { AuthRequest } from './src/server/auth.ts';
 import {
   ROLE_DEFAULT_ORGS,
@@ -15,10 +15,36 @@ import {
   normalizeUserRole,
 } from './src/server/auth.ts';
 import { DomainError, supabaseBackendRepo } from './src/server/supabaseRepository.ts';
-import { QpiAIOptEngine, QpiAIQuantumEngine } from './src/services/qpiai.ts';
+import {
+  QpiAIOptEngine,
+  QpiAIQuantumEngine,
+  SUPPORTED_QCLOUD_BACKENDS,
+  resolveOptBaseUrl,
+  resolveQCloudBaseUrl,
+} from './src/services/qpiai.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Sliding-window rate limiter to protect paid QpiAI / QCloud compute endpoints
+const qpiaiRateWindowMs = 60_000;
+const qpiaiMaxRequestsPerWindow = 20;
+const qpiaiHits = new Map<string, number[]>();
+
+function qpiaiRateLimiter(req: AuthRequest, res: Response, next: NextFunction): void {
+  const key = req.actor?.id || req.ip || 'anonymous';
+  const now = Date.now();
+  const recent = (qpiaiHits.get(key) || []).filter((t) => now - t < qpiaiRateWindowMs);
+  if (recent.length >= qpiaiMaxRequestsPerWindow) {
+    res.status(429).json({
+      detail: 'Rate limit exceeded for QpiAI compute endpoints. Please wait 60 seconds before retrying.',
+    });
+    return;
+  }
+  recent.push(now);
+  qpiaiHits.set(key, recent);
+  next();
+}
 
 async function startServer() {
   const app = express();
@@ -52,6 +78,24 @@ async function startServer() {
   apiRouter.get('/db/status', async (_req: Request, res: Response) => {
     const status = await supabaseBackendRepo.getDatabaseStatus();
     res.json(status);
+  });
+
+  apiRouter.get('/integrations/status', async (_req: Request, res: Response) => {
+    const dbStatus = await supabaseBackendRepo.getDatabaseStatus();
+    res.json({
+      supabase: dbStatus,
+      qpiai_opt: {
+        configured: Boolean((process.env.QPIAI_OPT_API_KEY || '').trim()),
+        endpoint: resolveOptBaseUrl(),
+      },
+      qpiai_qcloud: {
+        configured: Boolean((process.env.QPIAI_QUANTUM_API_KEY || '').trim()),
+        endpoint: resolveQCloudBaseUrl(),
+        default_backend: process.env.QPIAI_QUANTUM_BACKEND || 'QpiAI-QSV-Local',
+        supported_backends: SUPPORTED_QCLOUD_BACKENDS,
+      },
+      checked_at: new Date().toISOString(),
+    });
   });
 
   // Authentication & Stakeholder Persona Endpoints
@@ -307,15 +351,41 @@ async function startServer() {
     }
   });
 
-  // QpiAI Optimization & Quantum Endpoints (persisting execution records in Supabase)
+  // QpiAI Optimization & Quantum Endpoints (authenticated, rate-limited, persisting execution records in Supabase)
+  const QPIAI_ALLOWED_ROLES = [
+    'MANUFACTURER',
+    'OEM',
+    'FLEET_OPERATOR',
+    'SERVICE_CENTER',
+    'REMANUFACTURER',
+    'RECYCLER',
+    'REGULATOR_AUDITOR',
+    'ADMINISTRATOR',
+  ] as const;
+
   apiRouter.post(
     '/qpiai/opt/allocate',
-    auth.optionalAuth,
+    auth.requireRoles([...QPIAI_ALLOWED_ROLES]),
+    qpiaiRateLimiter,
     async (req: AuthRequest, res: Response) => {
       try {
-        const batteryIds: string[] = Array.isArray(req.body?.battery_ids)
-          ? req.body.battery_ids.map(String)
+        if (req.body?.battery_ids !== undefined && !Array.isArray(req.body.battery_ids)) {
+          res.status(400).json({ detail: '`battery_ids` must be a non-empty array of battery IDs.' });
+          return;
+        }
+        const rawIds: string[] = Array.isArray(req.body?.battery_ids)
+          ? req.body.battery_ids.map((v: unknown) => String(v || '').trim()).filter(Boolean)
           : ['BAT-NMC-8A2F91C0'];
+
+        if (rawIds.length === 0 || rawIds.length > 25) {
+          res.status(400).json({
+            detail: '`battery_ids` must contain between 1 and 25 valid battery passport IDs.',
+          });
+          return;
+        }
+
+        const mode: 'platform' | 'local' =
+          req.body?.mode === 'local' ? 'local' : 'platform';
 
         const batteryData: Array<{
           battery_id: string;
@@ -324,7 +394,7 @@ async function startServer() {
           total_co2_kg_per_kwh: number;
         }> = [];
 
-        for (const id of batteryIds) {
+        for (const id of rawIds) {
           try {
             const p = await supabaseBackendRepo.getPassport(id);
             batteryData.push({
@@ -343,19 +413,36 @@ async function startServer() {
           return;
         }
 
-        const result = await QpiAIOptEngine.solveAllocation(batteryData);
+        const result = await QpiAIOptEngine.solveAllocation(
+          batteryData,
+          ['stationary_bess', 'cell_reconditioning', 'deep_recycling'],
+          { mode }
+        );
+
         await supabaseBackendRepo.logQpiAIExecution({
           engineType: 'QPIAI_OPT',
           batteryId: batteryData[0].battery_id,
           actor: req.actor,
           rawStatus: result.status,
-          backend: 'QpiAI-Opt-Cloud',
-          jobId: result.job_id || null,
-          parameters: { battery_ids: batteryIds, num_variables: result.num_variables },
+          backend: result.solver_backend || (mode === 'local' ? 'Local-Exact-QUBO-Enumerator' : 'QUBO Solver'),
+          jobId: result.job_id || result.problem_id || null,
+          parameters: {
+            battery_ids: batteryData.map((b) => b.battery_id),
+            mode,
+            num_variables: result.num_variables,
+            problem_id: result.problem_id ?? null,
+          },
           results: {
+            is_cloud_result: Boolean(result.is_cloud_result),
+            execution_mode: result.execution_mode ?? null,
             qubo_sample: result.qubo_sample_matrix,
             objective: result.objective_value ?? null,
+            recommended_allocations: result.recommended_allocations ?? null,
           },
+          errorMessage:
+            result.status !== 'SUCCESS' && result.status !== 'LOCAL_SOLVED' && result.status !== 'SUBMITTED'
+              ? result.message
+              : null,
           executionTimeSeconds: result.execution_time_seconds ?? null,
         });
 
@@ -368,23 +455,40 @@ async function startServer() {
 
   apiRouter.post(
     '/qpiai/quantum/simulate-cathode',
-    auth.optionalAuth,
+    auth.requireRoles([...QPIAI_ALLOWED_ROLES]),
+    qpiaiRateLimiter,
     async (req: AuthRequest, res: Response) => {
       try {
-        const batteryId = String(req.body?.battery_id || 'BAT-NMC-8A2F91C0');
-        const cathode = String(req.body?.cathode_material || 'NMC 811');
+        const batteryId = String(req.body?.battery_id || 'BAT-NMC-8A2F91C0').trim();
+        const cathode = String(req.body?.cathode_material || 'NMC 811').trim();
         const soh = Number(req.body?.state_of_health_pct ?? 88.4);
         const cycles = Number(req.body?.cycle_count ?? 420);
+        const shots = Number(req.body?.shots ?? 1024);
+
+        if (Number.isNaN(soh) || soh < 0 || soh > 100) {
+          res.status(400).json({ detail: '`state_of_health_pct` must be between 0 and 100.' });
+          return;
+        }
+        if (Number.isNaN(cycles) || cycles < 0 || cycles > 100000) {
+          res.status(400).json({ detail: '`cycle_count` must be between 0 and 100000.' });
+          return;
+        }
+        if (!Number.isInteger(shots) || shots < 64 || shots > 4096) {
+          res.status(400).json({ detail: '`shots` must be an integer between 64 and 4096.' });
+          return;
+        }
+
         const backend = String(
           req.body?.backend || process.env.QPIAI_QUANTUM_BACKEND || 'QpiAI-QSV-Local'
-        );
+        ).trim();
 
-        const result = QpiAIQuantumEngine.simulateCathodeDegradation(
+        const result = await QpiAIQuantumEngine.simulateCathodeDegradation(
           batteryId,
           cathode,
           soh,
           cycles,
-          backend
+          backend,
+          { shots }
         );
 
         await supabaseBackendRepo.logQpiAIExecution({
@@ -393,18 +497,30 @@ async function startServer() {
           actor: req.actor,
           rawStatus: result.status,
           backend: result.backend_used,
+          jobId: result.job_id || result.circuit_id || null,
           parameters: {
             cathode,
             soh,
             cycles,
+            shots,
             num_qubits: result.num_qubits,
             depth: result.circuit_depth,
+            circuit_id: result.circuit_id ?? null,
           },
           results: {
+            is_cloud_execution: Boolean(result.is_cloud_execution),
+            is_hardware_execution: Boolean(result.is_hardware_execution),
+            execution_mode: result.execution_mode ?? null,
             probabilities: result.measured_probabilities,
             energy_hartree: result.estimated_ground_state_energy_hartree,
           },
-          errorMessage: result.status === 'AUTH_REQUIRED' ? result.message : null,
+          errorMessage:
+            result.status !== 'SUCCESS' &&
+            result.status !== 'SIMULATION_COMPLETED' &&
+            result.status !== 'SUBMITTED'
+              ? result.message
+              : null,
+          executionTimeSeconds: result.execution_time_seconds ?? null,
         });
 
         res.json(result);

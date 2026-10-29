@@ -193,24 +193,73 @@ export interface PublicVerification {
 }
 
 export interface QpiAIOptResponse {
-  status: 'SUCCESS' | 'SUBMITTED' | 'NOT_CONFIGURED' | 'ERROR';
+  status:
+    | 'SUCCESS'
+    | 'SUBMITTED'
+    | 'LOCAL_SOLVED'
+    | 'NOT_CONFIGURED'
+    | 'AUTH_REQUIRED'
+    | 'QUOTA_EXCEEDED'
+    | 'RATE_LIMITED'
+    | 'ERROR';
   configured: boolean;
+  authenticated?: boolean;
+  is_cloud_result?: boolean;
+  execution_mode?:
+    | 'QPIAI_OPT_CLOUD'
+    | 'LOCAL_EXACT_SOLVER'
+    | 'CLOUD_REJECTED_QUOTA'
+    | 'FORMULATION_ONLY'
+    | 'ERROR';
+  solver_backend?: string | null;
   problem_type: string;
+  problem_id?: string | null;
   num_variables: number;
   qubo_edges_count: number;
   qubo_sample_matrix: Record<string, number>;
   objective_value?: number | null;
   recommended_allocations?: Record<string, string> | null;
+  local_reference_solution?: {
+    note: string;
+    objective_value: number;
+    allocations: Record<string, string>;
+  } | null;
   execution_time_seconds?: number | null;
   job_id?: string | null;
+  provider_http_status?: number | null;
   message: string;
   instructions?: string | null;
 }
 
 export interface QpiAIQuantumResponse {
-  status: 'SUCCESS' | 'SUBMITTED' | 'SIMULATION_COMPLETED' | 'AUTH_REQUIRED' | 'ERROR';
+  status:
+    | 'SUCCESS'
+    | 'SUBMITTED'
+    | 'SIMULATION_COMPLETED'
+    | 'AUTH_REQUIRED'
+    | 'SUBSCRIPTION_REQUIRED'
+    | 'QUOTA_EXCEEDED'
+    | 'RATE_LIMITED'
+    | 'ERROR';
   configured_for_cloud: boolean;
+  qcloud_authenticated?: boolean;
+  is_cloud_execution?: boolean;
+  is_hardware_execution?: boolean;
+  execution_mode?:
+    | 'QCLOUD_QUANTUM_HARDWARE'
+    | 'QCLOUD_REMOTE_SIMULATOR'
+    | 'LOCAL_STATEVECTOR_SIMULATOR'
+    | 'QCLOUD_REJECTED_SUBSCRIPTION'
+    | 'FORMULATION_ONLY'
+    | 'ERROR';
   backend_used: string;
+  job_id?: string | null;
+  circuit_id?: string | null;
+  shots?: number;
+  measured_counts?: Record<string, number>;
+  execution_time_seconds?: number | null;
+  provider_http_status?: number | null;
+  available_cloud_backends?: string[];
   num_qubits: number;
   circuit_depth: number;
   quantum_gate_counts: Record<string, number>;
@@ -222,6 +271,12 @@ export interface QpiAIQuantumResponse {
   instructions?: string | null;
 }
 
+export interface DatabaseTableStatus {
+  name: string;
+  exists: boolean;
+  rowCount: number | null;
+}
+
 export interface DatabaseStatus {
   isConfigured: boolean;
   isConnected: boolean;
@@ -229,4 +284,5 @@ export interface DatabaseStatus {
   message: string;
   endpointUrl?: string;
   lastChecked?: string;
+  tables?: DatabaseTableStatus[];
 }

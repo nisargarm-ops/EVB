@@ -34,11 +34,12 @@ class Settings(BaseSettings):
     SUPABASE_SECRET_KEY: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
     SUPABASE_JWKS_URL: str = ""
-    USE_MEMORY_DB: bool = True  # Automatically falls back to thread-safe memory DB if credentials absent
+    USE_MEMORY_DB: bool = False
+    FORCE_MEMORY_DB: bool = False
     
     # QpiAI Integrations (Teammate 4 modules)
     QPIAI_OPT_API_KEY: str = ""
-    QPIAI_OPT_URL: str = "https://opt.qpiai.tech/api/v1"
+    QPIAI_OPT_URL: str = "https://opt-server.qpiai.tech/api"
     QPIAI_QUANTUM_API_KEY: str = ""
     QPIAI_QUANTUM_BACKEND: str = "QpiAI-QSV-Local"
 

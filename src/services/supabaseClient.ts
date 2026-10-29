@@ -18,11 +18,13 @@ const getEnvVar = (key: string): string => {
 };
 
 const activeUrl = getEnvVar('VITE_SUPABASE_URL') || getEnvVar('SUPABASE_URL');
-const activePublishableKey =
+const rawCandidateKey =
   getEnvVar('VITE_SUPABASE_PUBLISHABLE_KEY') ||
   getEnvVar('VITE_SUPABASE_ANON_KEY') ||
   getEnvVar('SUPABASE_PUBLISHABLE_KEY') ||
   getEnvVar('SUPABASE_KEY');
+
+const activePublishableKey = rawCandidateKey.startsWith('sb_secret_') ? '' : rawCandidateKey;
 
 export const isSupabaseConfigured = Boolean(
   activeUrl &&

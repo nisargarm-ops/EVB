@@ -135,29 +135,42 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({
               <Layers className="w-4 h-4 text-cyan-400" />
               <span>Managed PostgreSQL Schema & Triggers</span>
             </span>
-            <span className="text-[11px] font-mono text-emerald-400">11 Tables • RLS Enforced</span>
+            <span className="text-[11px] font-mono text-emerald-400">
+              {status?.tables
+                ? `${status.tables.filter((t) => t.exists).length}/${status.tables.length} Tables Active • RLS`
+                : 'Probing Schema...'}
+            </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] font-mono text-slate-300">
-            {[
-              'organizations',
-              'profiles',
-              'batteries',
-              'battery_metrics',
-              'lifecycle_events',
-              'custody_transfers',
-              'evidence_records',
-              'verification_results',
-              'disposition_decisions',
-              'audit_logs',
-              'qpiai_execution_records',
-            ].map((tbl) => (
+            {(
+              status?.tables ||
+              [
+                'organizations',
+                'profiles',
+                'batteries',
+                'battery_metrics',
+                'lifecycle_events',
+                'custody_transfers',
+                'evidence_records',
+                'verification_results',
+                'disposition_decisions',
+                'audit_logs',
+                'qpiai_execution_records',
+              ].map((name) => ({ name, exists: Boolean(status?.isConnected), rowCount: null }))
+            ).map((tbl) => (
               <div
-                key={tbl}
+                key={tbl.name}
                 className="p-2 rounded-lg bg-slate-950/80 border border-slate-800 flex items-center justify-between"
               >
-                <span className="truncate mr-1">{tbl}</span>
-                <span className="text-emerald-400 shrink-0">✓ RLS</span>
+                <span className="truncate mr-1">{tbl.name}</span>
+                {tbl.exists ? (
+                  <span className="text-emerald-400 shrink-0">
+                    ✓{tbl.rowCount !== null ? ` (${tbl.rowCount})` : ' RLS'}
+                  </span>
+                ) : (
+                  <span className="text-amber-400 shrink-0 text-[10px]">Pending</span>
+                )}
               </div>
             ))}
           </div>

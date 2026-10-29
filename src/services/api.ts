@@ -607,15 +607,18 @@ export const api = {
   // --------------------------------------------------------------------------
   // QpiAI Engines & Execution Records
   // --------------------------------------------------------------------------
-  async runQpiAIOpt(batteryIds: string[]): Promise<QpiAIOptResponse> {
+  async runQpiAIOpt(
+    batteryIds: string[],
+    mode: 'platform' | 'local' = 'platform'
+  ): Promise<QpiAIOptResponse> {
     if (isBrowserRuntime) {
       return backendFetch<QpiAIOptResponse>(
         '/qpiai/opt/allocate',
         {
           method: 'POST',
-          body: JSON.stringify({ battery_ids: batteryIds }),
+          body: JSON.stringify({ battery_ids: batteryIds, mode }),
         },
-        false
+        true
       );
     }
 
@@ -631,14 +634,20 @@ export const api = {
         });
       }
     }
-    return QpiAIOptEngine.solveAllocation(batteryData);
+    return QpiAIOptEngine.solveAllocation(
+      batteryData,
+      ['stationary_bess', 'cell_reconditioning', 'deep_recycling'],
+      { mode }
+    );
   },
 
   async runQpiAIQuantum(
     batteryId: string,
     cathode: string,
     soh: number,
-    cycles: number
+    cycles: number,
+    backend?: string,
+    shots: number = 1024
   ): Promise<QpiAIQuantumResponse> {
     if (isBrowserRuntime) {
       return backendFetch<QpiAIQuantumResponse>(
@@ -650,12 +659,21 @@ export const api = {
             cathode_material: cathode,
             state_of_health_pct: soh,
             cycle_count: cycles,
+            ...(backend ? { backend } : {}),
+            shots,
           }),
         },
-        false
+        true
       );
     }
 
-    return QpiAIQuantumEngine.simulateCathodeDegradation(batteryId, cathode, soh, cycles);
+    return QpiAIQuantumEngine.simulateCathodeDegradation(
+      batteryId,
+      cathode,
+      soh,
+      cycles,
+      backend,
+      { shots }
+    );
   },
 };

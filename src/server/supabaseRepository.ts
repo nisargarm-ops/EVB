@@ -7,6 +7,7 @@ import type {
   CustodyEvent,
   CustodyTransfer,
   DatabaseStatus,
+  DatabaseTableStatus,
   DispositionDecision,
   HealthState,
   Organization,
@@ -50,17 +51,31 @@ export class SupabaseBackendRepository {
   private supabaseUrl = '';
   private seedPromise: Promise<void> | null = null;
 
+  private resolveServerSecretKey(): string {
+    const candidates = [
+      process.env.SUPABASE_SECRET_KEY,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      process.env.SUPABASE_KEY,
+    ];
+    for (const raw of candidates) {
+      const val = (raw || '').trim();
+      if (
+        val &&
+        !val.startsWith('sb_publishable_') &&
+        !val.includes('your_public_key') &&
+        !val.includes('your_server_only')
+      ) {
+        return val;
+      }
+    }
+    return '';
+  }
+
   private getAdminClient(): SupabaseClient {
     if (this.client) return this.client;
 
     const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
-    const secretKey = (
-      process.env.SUPABASE_SECRET_KEY ||
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.SUPABASE_PUBLISHABLE_KEY ||
-      process.env.SUPABASE_KEY ||
-      ''
-    ).trim();
+    const secretKey = this.resolveServerSecretKey();
 
     if (!url || !secretKey || url.includes('your-project')) {
       throw new DomainError(
@@ -83,23 +98,8 @@ export class SupabaseBackendRepository {
     const forceMemory = String(process.env.FORCE_MEMORY_DB || 'false').toLowerCase() === 'true';
     if (forceMemory) return false;
     const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
-    const key = (
-      process.env.SUPABASE_SECRET_KEY ||
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.SUPABASE_PUBLISHABLE_KEY ||
-      process.env.SUPABASE_KEY ||
-      ''
-    ).trim();
-    const hasValidSupabase = Boolean(
-      url &&
-        key &&
-        url.startsWith('http') &&
-        !url.includes('your-project') &&
-        !key.includes('your_public_key') &&
-        !key.includes('your_server_only')
-    );
-    if (hasValidSupabase) return true;
-    return false;
+    const key = this.resolveServerSecretKey();
+    return Boolean(url && key && url.startsWith('http') && !url.includes('your-project'));
   }
 
   /**
@@ -650,7 +650,8 @@ export class SupabaseBackendRepository {
         isConfigured: false,
         isConnected: false,
         provider: 'MEMORY_FALLBACK',
-        message: 'Running on in-memory repository (USE_MEMORY_DB=true or Supabase server credentials absent).',
+        message:
+          'Running on in-memory repository (USE_MEMORY_DB=true or Supabase server credentials absent).',
         lastChecked: new Date().toISOString(),
       };
     }
@@ -658,28 +659,55 @@ export class SupabaseBackendRepository {
     try {
       await this.ensureSeeded();
       const db = this.getAdminClient();
-      const { count, error } = await db
-        .from('batteries')
-        .select('*', { count: 'exact', head: true });
+      const expectedTables = [
+        'organizations',
+        'profiles',
+        'batteries',
+        'battery_metrics',
+        'lifecycle_events',
+        'custody_transfers',
+        'evidence_records',
+        'verification_results',
+        'disposition_decisions',
+        'audit_logs',
+        'qpiai_execution_records',
+      ];
 
-      if (error) {
+      const probes = await Promise.all(
+        expectedTables.map(async (name): Promise<DatabaseTableStatus> => {
+          const { count, error } = await db
+            .from(name)
+            .select('id', { count: 'exact' })
+            .limit(1);
+          if (error) {
+            return { name, exists: false, rowCount: null };
+          }
+          return { name, exists: true, rowCount: count ?? 0 };
+        })
+      );
+
+      const batteriesTable = probes.find((t) => t.name === 'batteries');
+      if (!batteriesTable || !batteriesTable.exists) {
         return {
           isConfigured: true,
           isConnected: false,
           provider: 'SUPABASE',
-          message: `Supabase query failed: ${error.message}`,
+          message: 'Supabase reachable, but core `batteries` table is missing.',
           endpointUrl: this.supabaseUrl,
           lastChecked: new Date().toISOString(),
+          tables: probes,
         };
       }
 
+      const activeCount = probes.filter((t) => t.exists).length;
       return {
         isConfigured: true,
         isConnected: true,
         provider: 'SUPABASE',
-        message: `Connected to live Supabase PostgreSQL via backend server (${count ?? 0} battery passports indexed, RLS & triggers active).`,
+        message: `Connected to live Supabase PostgreSQL (${batteriesTable.rowCount ?? 0} battery passports indexed, ${activeCount}/${expectedTables.length} tables active).`,
         endpointUrl: this.supabaseUrl,
         lastChecked: new Date().toISOString(),
+        tables: probes,
       };
     } catch (err: any) {
       return {
@@ -1159,9 +1187,18 @@ export class SupabaseBackendRepository {
       hash: genesisHash,
     });
 
-    await this.writeAuditLog(profileUuid, orgRecord.id, 'CREATE_BATTERY_PASSPORT', 'batteries', shortId, {
-      serial_number: insertRow.serial_number,
-    });
+    await this.writeAuditLog(
+      profileUuid,
+      actor.role,
+      orgRecord.id,
+      'CREATE_BATTERY_PASSPORT',
+      'batteries',
+      shortId,
+      {
+        serial_number: insertRow.serial_number,
+        chemistry: insertRow.chemistry,
+      }
+    );
 
     return this.getPassport(shortId);
   }
@@ -1262,6 +1299,20 @@ export class SupabaseBackendRepository {
         notes: telemetry.telemetry_notes || 'BMS diagnostic check',
       },
     });
+
+    await this.writeAuditLog(
+      profileUuid,
+      actor.role,
+      row.current_custodian_org_id,
+      'UPDATE_BATTERY_TELEMETRY',
+      'battery_metrics',
+      row.battery_id,
+      {
+        state_of_health_pct: soh,
+        cycle_count: cycles,
+        status: nextStatus,
+      }
+    );
 
     return this.getPassport(row.battery_id);
   }
@@ -1503,6 +1554,20 @@ export class SupabaseBackendRepository {
       throw new DomainError(`Failed to create custody transfer: ${error?.message}`, 400);
     }
 
+    await this.writeAuditLog(
+      profileUuid,
+      actor.role,
+      senderOrg.id,
+      'INITIATE_CUSTODY_TRANSFER',
+      'custody_transfers',
+      data.id,
+      {
+        battery_id: row.battery_id,
+        receiver_org_id: receiverOrg.id,
+        transfer_type: data.transfer_type,
+      }
+    );
+
     return {
       id: data.id,
       battery_id: row.battery_id,
@@ -1619,6 +1684,20 @@ export class SupabaseBackendRepository {
       });
     }
 
+    await this.writeAuditLog(
+      profileUuid,
+      actor.role,
+      transfer.receiver_org_id,
+      'ACCEPT_CUSTODY_TRANSFER',
+      'custody_transfers',
+      transfer.id,
+      {
+        battery_id: batRow?.battery_id || transfer.battery_id,
+        sender_org_id: transfer.sender_org_id,
+        receiver_org_id: transfer.receiver_org_id,
+      }
+    );
+
     return {
       id: transfer.id,
       battery_id: batRow?.battery_id || transfer.battery_id,
@@ -1695,6 +1774,19 @@ export class SupabaseBackendRepository {
     }
 
     const batRow = await this.findRawBatteryRow(transfer.battery_id);
+
+    await this.writeAuditLog(
+      profileUuid,
+      actor.role,
+      transfer.receiver_org_id,
+      'REJECT_CUSTODY_TRANSFER',
+      'custody_transfers',
+      transfer.id,
+      {
+        battery_id: batRow?.battery_id || transfer.battery_id,
+        reason: reason.trim(),
+      }
+    );
 
     return {
       id: transfer.id,
@@ -1893,19 +1985,6 @@ export class SupabaseBackendRepository {
     try {
       await this.ensureSeeded();
       const db = this.getAdminClient();
-      const allowedStatuses = new Set([
-        'SUCCESS',
-        'SUBMITTED',
-        'NOT_CONFIGURED',
-        'AUTH_REQUIRED',
-        'ERROR',
-        'FAILED',
-      ]);
-      const normalizedStatus = allowedStatuses.has(params.rawStatus)
-        ? params.rawStatus
-        : params.rawStatus === 'SIMULATION_COMPLETED'
-        ? 'SUCCESS'
-        : 'ERROR';
 
       let validHumanBatteryId: string | null = null;
       if (params.batteryId) {
@@ -1919,6 +1998,42 @@ export class SupabaseBackendRepository {
           ? params.actor.organization_id
           : null;
 
+      // 1. Always persist structured QpiAI execution telemetry to core `audit_logs` table
+      await this.writeAuditLog(
+        profileUuid,
+        params.actor?.role || null,
+        orgId,
+        params.engineType === 'QPIAI_OPT' ? 'QPIAI_OPT_EXECUTION' : 'QPIAI_QUANTUM_EXECUTION',
+        'qpiai_execution',
+        params.jobId || validHumanBatteryId || params.engineType,
+        {
+          engine_type: params.engineType,
+          battery_id: validHumanBatteryId,
+          raw_status: params.rawStatus,
+          backend: params.backend,
+          job_id: params.jobId || null,
+          parameters: params.parameters,
+          results: params.results,
+          error_message: params.errorMessage || null,
+          execution_time_seconds: params.executionTimeSeconds ?? null,
+        }
+      );
+
+      // 2. Also persist to `qpiai_execution_records` if Migration 002/004 is applied
+      const legacyAllowedStatuses = new Set([
+        'SUCCESS',
+        'SUBMITTED',
+        'NOT_CONFIGURED',
+        'AUTH_REQUIRED',
+        'ERROR',
+        'FAILED',
+      ]);
+      const normalizedStatus = legacyAllowedStatuses.has(params.rawStatus)
+        ? params.rawStatus
+        : params.rawStatus === 'SIMULATION_COMPLETED' || params.rawStatus === 'LOCAL_SOLVED'
+        ? 'SUBMITTED'
+        : 'ERROR';
+
       await db.from('qpiai_execution_records').insert({
         engine_type: params.engineType,
         battery_id: validHumanBatteryId,
@@ -1927,7 +2042,7 @@ export class SupabaseBackendRepository {
         status: normalizedStatus,
         backend: params.backend,
         job_id: params.jobId || null,
-        parameters: params.parameters,
+        parameters: { ...params.parameters, raw_status: params.rawStatus },
         results: params.results,
         error_message: params.errorMessage || null,
         execution_time_seconds: params.executionTimeSeconds ?? null,
@@ -1939,21 +2054,25 @@ export class SupabaseBackendRepository {
 
   private async writeAuditLog(
     actorId: string | null,
+    actorRole: string | null,
     organizationId: string | null,
     action: string,
-    resourceType: string,
-    resourceId: string,
+    entityType: string,
+    entityId: string,
     details: Record<string, any>
   ): Promise<void> {
     try {
       const db = this.getAdminClient();
       await db.from('audit_logs').insert({
-        actor_id: actorId,
-        organization_id: organizationId,
         action,
-        resource_type: resourceType,
-        resource_id: resourceId,
-        details,
+        entity_type: entityType,
+        entity_id: entityId,
+        actor_id: actorId,
+        actor_role: actorRole,
+        details: {
+          ...details,
+          ...(organizationId ? { organization_id: organizationId } : {}),
+        },
       });
     } catch {
       // Ignore non-fatal audit log errors
