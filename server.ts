@@ -75,10 +75,12 @@ async function startServer() {
     });
   });
 
-  apiRouter.get('/db/status', async (_req: Request, res: Response) => {
+  const handleDbStatus = async (_req: Request, res: Response) => {
     const status = await supabaseBackendRepo.getDatabaseStatus();
     res.json(status);
-  });
+  };
+  apiRouter.get('/db/status', handleDbStatus);
+  apiRouter.get('/database/status', handleDbStatus);
 
   apiRouter.get('/integrations/status', async (_req: Request, res: Response) => {
     const dbStatus = await supabaseBackendRepo.getDatabaseStatus();
@@ -179,8 +181,8 @@ async function startServer() {
     }
   });
 
-  // Battery Passports
-  apiRouter.get('/passports', async (req: Request, res: Response) => {
+  // Battery Passports (supporting both /passports and /batteries path conventions)
+  const handleListPassports = async (req: Request, res: Response) => {
     try {
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const list = await supabaseBackendRepo.listPassports(status);
@@ -188,52 +190,69 @@ async function startServer() {
     } catch (err) {
       sendError(res, err, 'Failed to fetch battery passports');
     }
-  });
+  };
+  apiRouter.get('/passports', handleListPassports);
+  apiRouter.get('/batteries', handleListPassports);
 
-  apiRouter.get('/passports/:id', async (req: Request, res: Response) => {
+  const handleGetPassport = async (req: Request, res: Response) => {
     try {
       const passport = await supabaseBackendRepo.getPassport(String(req.params.id));
       res.json(passport);
     } catch (err) {
       sendError(res, err, 'Failed to load battery passport');
     }
-  });
+  };
+  apiRouter.get('/passports/:id', handleGetPassport);
+  apiRouter.get('/batteries/:id', handleGetPassport);
 
+  const handleCreatePassport = async (req: AuthRequest, res: Response) => {
+    try {
+      const created = await supabaseBackendRepo.createPassport(req.body, req.actor!);
+      res.status(201).json(created);
+    } catch (err) {
+      sendError(res, err, 'Failed to register battery passport');
+    }
+  };
   apiRouter.post(
     '/passports',
     auth.requireRoles(['MANUFACTURER', 'ADMINISTRATOR']),
-    async (req: AuthRequest, res: Response) => {
-      try {
-        const created = await supabaseBackendRepo.createPassport(req.body, req.actor!);
-        res.status(201).json(created);
-      } catch (err) {
-        sendError(res, err, 'Failed to register battery passport');
-      }
-    }
+    handleCreatePassport
+  );
+  apiRouter.post(
+    '/batteries',
+    auth.requireRoles(['MANUFACTURER', 'ADMINISTRATOR']),
+    handleCreatePassport
   );
 
+  const handleUpdateTelemetry = async (req: AuthRequest, res: Response) => {
+    try {
+      const updated = await supabaseBackendRepo.updateTelemetry(
+        String(req.params.id),
+        req.body,
+        req.actor!
+      );
+      res.json(updated);
+    } catch (err) {
+      sendError(res, err, 'Failed to update battery telemetry');
+    }
+  };
+  const telemetryRoles: import('./src/types/index.ts').UserRole[] = [
+    'MANUFACTURER',
+    'OEM',
+    'FLEET_OPERATOR',
+    'SERVICE_CENTER',
+    'REMANUFACTURER',
+    'ADMINISTRATOR',
+  ];
   apiRouter.patch(
     '/passports/:id/telemetry',
-    auth.requireRoles([
-      'MANUFACTURER',
-      'OEM',
-      'FLEET_OPERATOR',
-      'SERVICE_CENTER',
-      'REMANUFACTURER',
-      'ADMINISTRATOR',
-    ]),
-    async (req: AuthRequest, res: Response) => {
-      try {
-        const updated = await supabaseBackendRepo.updateTelemetry(
-          String(req.params.id),
-          req.body,
-          req.actor!
-        );
-        res.json(updated);
-      } catch (err) {
-        sendError(res, err, 'Failed to update battery telemetry');
-      }
-    }
+    auth.requireRoles(telemetryRoles),
+    handleUpdateTelemetry
+  );
+  apiRouter.patch(
+    '/batteries/:id/telemetry',
+    auth.requireRoles(telemetryRoles),
+    handleUpdateTelemetry
   );
 
   // Custody Hash-Chain Events
@@ -530,9 +549,25 @@ async function startServer() {
     }
   );
 
+  // Explicit 404 for any unhandled API route — NEVER let API requests fall through to Vite HTML SPA handler
+  apiRouter.use((req: Request, res: Response) => {
+    res.status(404).json({
+      detail: `API endpoint '${req.method} ${req.originalUrl}' not found.`,
+      error: 'Not Found',
+    });
+  });
+
   // Mount under both /api/v1 and /api
   app.use('/api/v1', apiRouter);
   app.use('/api', apiRouter);
+
+  // Safety guard: reject any /api request from reaching static/Vite HTML fallbacks
+  app.use('/api', (req: Request, res: Response) => {
+    res.status(404).json({
+      detail: `API endpoint '${req.method} ${req.originalUrl}' not found.`,
+      error: 'Not Found',
+    });
+  });
 
   // Frontend serving (Vite dev middleware in development, static dist in production)
   if (process.env.NODE_ENV !== 'production') {
@@ -545,12 +580,12 @@ async function startServer() {
   } else {
     const distPath = path.join(__dirname, 'dist');
     app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
+    app.use((_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  const port = Number(process.env.PORT) || 3000;
+  const port = 3000;
   app.listen(port, '0.0.0.0', () => {
     console.log(`BatteryPass 360 full-stack server listening on http://0.0.0.0:${port}`);
   });

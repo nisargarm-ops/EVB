@@ -91,10 +91,14 @@ async function ensureBackendToken(): Promise<string> {
           currentRole === 'ADMINISTRATOR' ? 'MANUFACTURER' : currentRole;
         const res = await fetch(`${API_BASE}/auth/switch-role`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
           body: JSON.stringify({ role: safeBootstrapRole, organization: currentOrg }),
         });
-        if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
           if (data.access_token) {
             setAuthToken(data.access_token);
@@ -120,6 +124,7 @@ async function backendFetch<T>(
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    Accept: 'application/json',
     ...((options.headers as Record<string, string>) || {}),
   };
 
@@ -151,12 +156,39 @@ async function backendFetch<T>(
     }
   }
 
+  const contentType = res.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+
   if (!res.ok) {
-    const errBody = await res.json().catch(() => ({}));
-    throw new Error(errBody.detail || errBody.error || `Request failed (${res.status})`);
+    if (isJson) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.detail || errBody.error || `Request failed (${res.status})`);
+    } else {
+      const rawText = await res.text().catch(() => '');
+      if (rawText.includes('<!doctype') || rawText.includes('<html') || rawText.includes('<head')) {
+        throw new Error(
+          `Server returned an HTML error page (${res.status}) instead of JSON for '${path}'. Please verify the backend API route.`
+        );
+      }
+      throw new Error(`Request failed (${res.status}): ${rawText.slice(0, 120)}`);
+    }
   }
 
-  return res.json() as Promise<T>;
+  if (!isJson) {
+    const rawText = await res.text().catch(() => '');
+    if (rawText.includes('<!doctype') || rawText.includes('<html') || rawText.includes('<head')) {
+      throw new Error(
+        `Backend route '${path}' returned an HTML page (status ${res.status}) instead of JSON. Ensure the endpoint is mapped in server.ts.`
+      );
+    }
+    throw new Error(`Expected JSON from '${path}', but received '${contentType || 'text'}'`);
+  }
+
+  try {
+    return (await res.json()) as T;
+  } catch (err: any) {
+    throw new Error(`Failed to parse JSON response from '${path}': ${err.message}`);
+  }
 }
 
 export const api = {
