@@ -473,41 +473,49 @@ async function startServer() {
   });
 
   // Dual-ID Physical Identity Cross-Verification
+  const handlePhysicalVerification = async (req: AuthRequest, res: Response) => {
+    try {
+      const rawBatteryId = String(req.params.batteryId || '').trim();
+      if (!rawBatteryId || rawBatteryId === 'undefined' || rawBatteryId === 'null') {
+        res.status(400).json({ detail: 'Digital Battery ID or DID parameter is required for identity verification.' });
+        return;
+      }
+
+      const { physical_serial, inspector_notes, barcode_type, device_info } = req.body || {};
+      if (!physical_serial || typeof physical_serial !== 'string' || !physical_serial.trim()) {
+        res.status(400).json({ detail: 'Physical casing serial number is required for cross-verification.' });
+        return;
+      }
+
+      const cleanSerial = physical_serial.trim();
+      if (cleanSerial.length > 120 || /[\x00-\x1F\x7F]/.test(cleanSerial)) {
+        res.status(400).json({ detail: 'Malformed physical serial number. Must not contain control characters and must not exceed 120 characters.' });
+        return;
+      }
+
+      const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+      const outcome = await supabaseBackendRepo.verifyPhysicalIdentity(
+        rawBatteryId,
+        { physical_serial: cleanSerial, inspector_notes, barcode_type, device_info },
+        req.actor || null,
+        clientIp
+      );
+      res.json(outcome);
+    } catch (err) {
+      sendError(res, err, 'Failed to perform physical identity verification');
+    }
+  };
+
   apiRouter.post(
     '/verify/:batteryId/physical',
     auth.optionalAuth,
-    async (req: AuthRequest, res: Response) => {
-      try {
-        const rawBatteryId = String(req.params.batteryId || '').trim();
-        if (!rawBatteryId || rawBatteryId === 'undefined' || rawBatteryId === 'null') {
-          res.status(400).json({ detail: 'Digital Battery ID or DID parameter is required for identity verification.' });
-          return;
-        }
+    handlePhysicalVerification
+  );
 
-        const { physical_serial, inspector_notes, barcode_type, device_info } = req.body || {};
-        if (!physical_serial || typeof physical_serial !== 'string' || !physical_serial.trim()) {
-          res.status(400).json({ detail: 'Physical casing serial number is required for cross-verification.' });
-          return;
-        }
-
-        const cleanSerial = physical_serial.trim();
-        if (cleanSerial.length > 120 || /[\x00-\x1F\x7F]/.test(cleanSerial)) {
-          res.status(400).json({ detail: 'Malformed physical serial number. Must not contain control characters and must not exceed 120 characters.' });
-          return;
-        }
-
-        const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
-        const outcome = await supabaseBackendRepo.verifyPhysicalIdentity(
-          rawBatteryId,
-          { physical_serial: cleanSerial, inspector_notes, barcode_type, device_info },
-          req.actor || null,
-          clientIp
-        );
-        res.json(outcome);
-      } catch (err) {
-        sendError(res, err, 'Failed to perform physical identity verification');
-      }
-    }
+  apiRouter.post(
+    '/verify/:batteryId/verify-serial',
+    auth.optionalAuth,
+    handlePhysicalVerification
   );
 
   // Anti-Fraud: Authorized Review & Reset of Locked/Flagged Batteries

@@ -14,11 +14,9 @@ import {
   ExternalLink, 
   ShieldCheck, 
   RotateCcw,
-  AlertTriangle,
-  Barcode
+  AlertTriangle
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Barcode128 } from '../components/Barcode128';
 import { api } from '../services/api';
 import { BatteryPassport } from '../types';
 import { useLanguage } from '../context/LanguageContext';
@@ -187,48 +185,6 @@ export const CreatePassport: React.FC<CreatePassportProps> = ({ onBack, onSucces
     img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
   };
 
-  const handleDownloadBarcodePng = () => {
-    if (!createdPassport) return;
-    const svg = document.getElementById('created-barcode-svg');
-    if (!svg) return;
-    const svgData = new XMLSerializer().serializeToString(svg);
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-    img.onload = () => {
-      canvas.width = Math.max(img.width + 100, 560);
-      canvas.height = img.height + 120;
-      if (!ctx) return;
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // EU Regulation Header
-      ctx.fillStyle = '#059669';
-      ctx.font = 'bold 12px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('EU 2023/1542 PHYSICAL PACK SERIAL NUMBER', canvas.width / 2, 28);
-
-      // Center the barcode image
-      const x = (canvas.width - img.width) / 2;
-      ctx.drawImage(img, x, 42);
-
-      // Footnote
-      ctx.font = '10px monospace';
-      ctx.fillStyle = '#64748B';
-      ctx.fillText(
-        `Code 128 Subset B • Laser Casing ID: ${createdPassport.serial_number} • Bound to Passport: ${createdPassport.battery_id}`,
-        canvas.width / 2,
-        canvas.height - 18
-      );
-
-      const a = document.createElement('a');
-      a.download = `BatteryPass-${createdPassport.serial_number}-Barcode.png`;
-      a.href = canvas.toDataURL('image/png');
-      a.click();
-    };
-    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
-  };
-
   const handleResetForm = () => {
     setCreatedPassport(null);
     setError(null);
@@ -264,7 +220,7 @@ export const CreatePassport: React.FC<CreatePassportProps> = ({ onBack, onSucces
               <span className="font-bold text-[#14532D] dark:text-[#34D399] text-sm">{createdPassport.battery_id}</span>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-[#E5E7EB] dark:border-[#1E382B]">
-              <span className="text-[#64748B] dark:text-[#94A3B8]">Serial Number:</span>
+              <span className="text-[#64748B] dark:text-[#94A3B8]">Permanently Engraved Serial Number:</span>
               <span className="font-bold text-[#1F2937] dark:text-[#F1F5F9]">{createdPassport.serial_number}</span>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
@@ -273,12 +229,12 @@ export const CreatePassport: React.FC<CreatePassportProps> = ({ onBack, onSucces
             </div>
           </div>
 
-          {/* Generated QR Code & Physical Barcode Card */}
+          {/* Generated QR Code & Permanent Casing Engraving Card */}
           <div 
             id="qr-print-area"
             className="p-6 rounded-2xl bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B] flex flex-col items-center justify-center max-w-md mx-auto shadow-inner"
           >
-            {/* Digital Passport QR Code */}
+            {/* Digital Passport QR Code (Only Machine-Readable Code) */}
             <div className="bg-white p-4 rounded-2xl border border-[#E5E7EB] shadow-xs">
               <QRCodeSVG
                 id="created-qr-svg"
@@ -293,49 +249,33 @@ export const CreatePassport: React.FC<CreatePassportProps> = ({ onBack, onSucces
                 {createdPassport.battery_id}
               </div>
               <div className="text-[10px] text-[#059669] dark:text-[#34D399] font-bold tracking-wider mt-0.5 uppercase">
-                EU 2023/1542 Digital Passport
+                EU 2023/1542 Digital Passport QR
               </div>
             </div>
 
-            {/* Physical Serial Barcode (Code 128) */}
+            {/* Permanent Engraved Physical Serial Number (Plain Readable Text) */}
             <div className="w-full mt-5 pt-4 border-t border-[#E5E7EB] dark:border-[#1E382B] flex flex-col items-center">
-              <div className="text-[10px] text-[#059669] dark:text-[#34D399] font-bold tracking-wider mb-2 uppercase flex items-center space-x-1.5">
-                <Barcode className="w-3.5 h-3.5" />
-                <span>Physical Casing Serial (Code 128)</span>
+              <div className="text-[10px] text-[#059669] dark:text-[#34D399] font-bold tracking-wider mb-1.5 uppercase text-center">
+                Permanently Engraved Casing Serial
               </div>
-              <div className="bg-white p-3 rounded-xl border border-[#E5E7EB] shadow-2xs w-full flex items-center justify-center">
-                <Barcode128
-                  id="created-barcode-svg"
-                  serialNumber={createdPassport.serial_number}
-                  height={50}
-                  moduleWidth={2}
-                  showText={true}
-                />
+              <div className="bg-white dark:bg-[#121F17] px-5 py-2.5 rounded-xl border border-[#E5E7EB] dark:border-[#1E382B] shadow-2xs font-mono font-extrabold text-sm sm:text-base text-[#14532D] dark:text-[#34D399] tracking-wider text-center select-all">
+                {createdPassport.serial_number}
               </div>
               <div className="text-[10px] text-[#64748B] dark:text-[#94A3B8] font-mono mt-1.5 text-center">
-                Permanent Laser Engraving / Data Plate
+                Laser-engraved on physical casing • Manually entered in Step 2
               </div>
             </div>
           </div>
 
-          {/* Action Buttons: Download QR, Download Barcode, Copy Link, Print Sticker */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {/* Action Buttons: Download QR, Copy Link, Print Sticker */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <button
               onClick={handleDownloadPng}
               className="flex items-center justify-center space-x-1.5 py-3 px-3 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] hover:bg-[#ECFDF3] dark:hover:bg-[#1F382B] text-[#1F2937] dark:text-[#F1F5F9] text-xs font-semibold border border-[#E5E7EB] dark:border-[#1E382B] hover:border-[#14532D] transition-all shadow-2xs"
               title="Download Digital QR Code PNG"
             >
               <Download className="w-4 h-4 text-[#059669]" />
-              <span>Download QR</span>
-            </button>
-
-            <button
-              onClick={handleDownloadBarcodePng}
-              className="flex items-center justify-center space-x-1.5 py-3 px-3 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] hover:bg-[#ECFDF3] dark:hover:bg-[#1F382B] text-[#1F2937] dark:text-[#F1F5F9] text-xs font-semibold border border-[#E5E7EB] dark:border-[#1E382B] hover:border-[#14532D] transition-all shadow-2xs"
-              title="Download Physical Serial Barcode PNG"
-            >
-              <Barcode className="w-4 h-4 text-[#059669]" />
-              <span>Download Barcode</span>
+              <span>Download QR PNG</span>
             </button>
 
             <button
@@ -354,7 +294,7 @@ export const CreatePassport: React.FC<CreatePassportProps> = ({ onBack, onSucces
             <button
               onClick={() => window.print()}
               className="flex items-center justify-center space-x-1.5 py-3 px-3 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] hover:bg-[#ECFDF3] dark:hover:bg-[#1F382B] text-[#1F2937] dark:text-[#F1F5F9] text-xs font-semibold border border-[#E5E7EB] dark:border-[#1E382B] hover:border-[#14532D] transition-all shadow-2xs"
-              title="Print Combined Sticker"
+              title="Print Passport Sticker"
             >
               <Printer className="w-4 h-4 text-[#14532D] dark:text-[#34D399]" />
               <span>Print Sticker</span>

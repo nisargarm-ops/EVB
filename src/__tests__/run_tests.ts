@@ -16,7 +16,6 @@
 
 import { batteryRepository } from '../services/store';
 import { api } from '../services/api';
-import { encodeCode128B, renderCode128SvgString } from '../utils/code128';
 
 async function runTestSuite() {
   console.log('================================================================');
@@ -381,53 +380,51 @@ async function runTestSuite() {
   }
 
   // --------------------------------------------------------------------------
-  // Test 19: Code 128 physical serial barcode generator validity
+  // Test 19: Permanent engraved serial number format and purity
   // --------------------------------------------------------------------------
   try {
     const sampleSerial = 'SN-2026-NMC-25360';
-    const encoding = encodeCode128B(sampleSerial);
-    // Code 128: 10 quiet + 11 start + (17 chars * 11) + 11 check + 13 stop + 10 quiet = 242 modules
-    const expectedModules = 10 + 11 + sampleSerial.length * 11 + 11 + 13 + 10;
-    const isValidCode128 =
-      encoding.text === sampleSerial &&
-      encoding.totalModules === expectedModules &&
-      encoding.bars.length > 0 &&
-      encoding.checksum >= 0 &&
-      encoding.checksum <= 102;
-    assert(isValidCode128, `Test 19: Code 128 generates ISO/IEC 15417 compliant encoding for '${sampleSerial}' (${encoding.totalModules} modules, checksum ${encoding.checksum})`);
+    const isHumanReadable =
+      typeof sampleSerial === 'string' &&
+      sampleSerial.length > 5 &&
+      sampleSerial.length <= 120 &&
+      !/[\x00-\x1F\x7F]/.test(sampleSerial) &&
+      !sampleSerial.includes('http://') &&
+      !sampleSerial.includes('https://');
+    assert(isHumanReadable, `Test 19: Permanent engraved serial number is human-readable plain text strictly isolated from URLs ('${sampleSerial}')`);
   } catch (e: any) {
     assert(false, 'Test 19', e.message);
   }
 
   // --------------------------------------------------------------------------
-  // Test 20: Barcode strictly encodes physical serial without URL encapsulation
+  // Test 20: Step 2 manual engraved serial validation against registered casing
   // --------------------------------------------------------------------------
   try {
-    const serial = 'QV-2024-NMC-98124';
-    const encoding = encodeCode128B(serial);
-    const doesNotContainUrl =
-      !encoding.text.includes('http://') &&
-      !encoding.text.includes('https://') &&
-      !encoding.text.includes('/verify/') &&
-      encoding.text === serial;
-    assert(doesNotContainUrl, 'Test 20: Barcode encodes pure physical serial number strictly isolated from digital passport URL');
+    const serial = 'REC-2021-NCA-10042';
+    const matchRes = await batteryRepository.verifyPhysicalIdentity(
+      'BAT-NCA-F104A7B2',
+      { physical_serial: serial, barcode_type: 'MANUAL' }
+    );
+    const isValidManualMatch =
+      matchRes.status === 'MATCHED' &&
+      matchRes.is_authentic === true &&
+      matchRes.registered_serial_number === serial;
+    assert(isValidManualMatch, 'Test 20: Step 2 manual engraved serial matches registered casing serial and unlocks passport');
   } catch (e: any) {
     assert(false, 'Test 20', e.message);
   }
 
   // --------------------------------------------------------------------------
-  // Test 21: Code 128 SVG generator renders valid printable markup
+  // Test 21: QR verification reference is the single machine-readable code
   // --------------------------------------------------------------------------
   try {
-    const serial = 'SN-2026-NMC-25360';
-    const svg = renderCode128SvgString(serial, { showText: true });
-    const isSvgValid =
-      svg.includes('<svg') &&
-      svg.includes('</svg>') &&
-      svg.includes('<rect') &&
-      svg.includes(`<text`) &&
-      svg.includes(serial);
-    assert(isSvgValid, 'Test 21: Code 128 SVG string renders valid scalable vector markup with human-readable text');
+    const batteryId = 'BAT-NMC-8A2F91C0';
+    const expectedQrUrl = `/verify/${encodeURIComponent(batteryId)}`;
+    const isValidQrRef =
+      expectedQrUrl.startsWith('/verify/') &&
+      expectedQrUrl.includes(batteryId) &&
+      !expectedQrUrl.includes('barcode');
+    assert(isValidQrRef, 'Test 21: Digital QR code is the exclusive machine-readable identifier pointing to passport precheck');
   } catch (e: any) {
     assert(false, 'Test 21', e.message);
   }

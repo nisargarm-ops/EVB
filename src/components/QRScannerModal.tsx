@@ -72,7 +72,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
       try {
         const barcodeDetector = new (window as any).BarcodeDetector({
-          formats: ['qr_code', 'data_matrix', 'code_128', 'code_39', 'ean_13'],
+          formats: ['qr_code'],
         });
         const canvas = document.createElement('canvas');
         canvas.width = imageData.width;

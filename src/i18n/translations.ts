@@ -261,12 +261,12 @@ export const translations: Record<Language, Translations> = {
     verifyPhysicalDisclaimer: 'Metrology and authenticity records cryptographically sealed on tamper-evident ledger.',
 
     // Dual-ID & Anti-Fraud
-    dualIdSectionTitle: 'Dual-ID Physical Casing Verification',
-    dualIdSectionSubtitle: 'Permanent laser-engraved casing serial & 2D barcode cross-check against cryptographically registered passport.',
-    laserSerialLabel: 'Laser-Engraved Serial / Casing Barcode',
+    dualIdSectionTitle: 'Two-Step Physical Casing Verification',
+    dualIdSectionSubtitle: 'Permanent laser-engraved casing serial cross-check against cryptographically registered passport.',
+    laserSerialLabel: 'Laser-Engraved Serial on Casing',
     laserSerialPlaceholder: 'e.g. QV-2024-NMC-98124',
-    verifyPhysicalBtn: 'Verify Physical Identity',
-    scanBarcodeBtn: 'Scan Casing Barcode',
+    verifyPhysicalBtn: 'Verify Engraved Serial',
+    scanBarcodeBtn: 'Enter Engraved Serial',
     statusMatched: 'Identity Matched',
     statusMismatchFraud: 'Identity Mismatch — Possible Fraud',
     statusUnregistered: 'Unregistered Casing Serial',

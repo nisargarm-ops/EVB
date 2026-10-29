@@ -9,7 +9,6 @@ import {
   Calendar, 
   FileCheck2,
   Camera,
-  Barcode,
   Fingerprint,
   Flag,
   AlertOctagon,
@@ -27,10 +26,10 @@ import {
   UserCheck,
   RefreshCw,
   ShieldOff,
-  Unlock
+  Unlock,
+  FileText
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Barcode128 } from '../components/Barcode128';
 import { 
   PublicVerification, 
   PhysicalVerificationResponse, 
@@ -75,9 +74,8 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
   const [physicalResult, setPhysicalResult] = useState<PhysicalVerificationResponse | null>(null);
   const [physicalError, setPhysicalError] = useState<string | null>(null);
   
-  // Modals for Step 1 QR and Step 2 Casing Scanner
+  // Modal for Step 1 QR Camera Scanner
   const [isDigitalScannerOpen, setIsDigitalScannerOpen] = useState(false);
-  const [isCasingScannerOpen, setIsCasingScannerOpen] = useState(false);
 
   // Authorized Admin/Inspector Review & Reset Lockout State
   const [adminReviewNotes, setAdminReviewNotes] = useState('');
@@ -143,7 +141,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
       const outcome = await api.verifyPhysicalIdentity(precheck.battery_id, {
         physical_serial: targetSerial,
         inspector_notes: inspectorNotes.trim() || undefined,
-        barcode_type: 'LASER_ETCHED',
+        barcode_type: 'MANUAL',
       });
 
       setPhysicalResult(outcome);
@@ -574,15 +572,15 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
               /* Physical UID Verification Form (Active when not locked) */
               <div className="space-y-3">
                 <label className="block text-xs font-bold text-[#1F2937] dark:text-[#F1F5F9]">
-                  Physical Laser-Etched UID / Serial Number
+                  Permanently Engraved Casing Serial Number
                 </label>
 
                 <div className="flex flex-col sm:flex-row items-stretch gap-2.5">
                   <div className="relative flex-1">
-                    <Barcode className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <FileText className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      placeholder="e.g. QV-2024-NMC-98124 or scan casing barcode"
+                      placeholder="Enter the serial number engraved on the battery casing (e.g. QV-2024-NMC-98124)"
                       value={physicalSerial}
                       onChange={e => setPhysicalSerial(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handlePhysicalVerify()}
@@ -592,21 +590,12 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setIsCasingScannerOpen(true)}
-                    className="px-3.5 py-2.5 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] hover:bg-[#ECFDF3] dark:hover:bg-[#1E382B] text-[#14532D] dark:text-[#34D399] border border-[#E5E7EB] dark:border-[#1E382B] text-xs font-bold flex items-center justify-center space-x-2 transition-colors shrink-0"
-                  >
-                    <Camera className="w-4 h-4" />
-                    <span>Scan Casing</span>
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={() => handlePhysicalVerify()}
                     disabled={physicalLoading}
-                    className="px-5 py-2.5 rounded-xl bg-[#14532D] hover:bg-[#166534] text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50 flex items-center justify-center space-x-2 shrink-0"
+                    className="px-6 py-2.5 rounded-xl bg-[#14532D] hover:bg-[#166534] text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50 flex items-center justify-center space-x-2 shrink-0"
                   >
                     <Fingerprint className="w-4 h-4" />
-                    <span>{physicalLoading ? t.loading : 'Verify Physical UID'}</span>
+                    <span>{physicalLoading ? t.loading : 'Verify Engraved Serial'}</span>
                   </button>
                 </div>
 
@@ -626,7 +615,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
                     }}
                     className="px-2.5 py-1 rounded-lg bg-[#ECFDF3] dark:bg-[#064E3B]/40 text-[#059669] dark:text-[#34D399] border border-[#D1FAE5] dark:border-[#065F46] font-mono text-[10px] font-bold hover:bg-[#D1FAE5] transition-colors"
                   >
-                    ✓ Valid Permanent UID
+                    ✓ Valid Engraved Serial
                   </button>
                   <button
                     type="button"
@@ -637,7 +626,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
                     }}
                     className="px-2.5 py-1 rounded-lg bg-[#FEF2F2] dark:bg-[#7F1D1D]/30 text-[#DC2626] dark:text-[#F87171] border border-[#FEE2E2] dark:border-[#991B1B] font-mono text-[10px] font-bold hover:bg-[#FEE2E2] transition-colors"
                   >
-                    ⚠ Swapped QR Label
+                    ⚠ Swapped QR Sticker
                   </button>
                   <button
                     type="button"
@@ -648,7 +637,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
                     }}
                     className="px-2.5 py-1 rounded-lg bg-[#FFFBEB] dark:bg-[#78350F]/30 text-[#D97706] dark:text-[#FBBF24] border border-[#FDE68A] dark:border-[#78350F] font-mono text-[10px] font-bold hover:bg-[#FEF3C7] transition-colors"
                   >
-                    ✕ Counterfeit UID
+                    ✕ Counterfeit Serial
                   </button>
                 </div>
               </div>
@@ -730,27 +719,21 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
                   </div>
                 </div>
 
-                {/* Identifier 2: Physical Casing Barcode (Code 128) */}
+                {/* Identifier 2: Permanent Engraved Physical Serial */}
                 <div className="p-4 rounded-2xl bg-[#F8FAF7] dark:bg-[#16261D] border border-[#E5E7EB] dark:border-[#1E382B] flex items-center space-x-4">
-                  <div className="p-2 bg-white rounded-xl border border-[#E5E7EB] shrink-0 shadow-xs max-w-[130px] overflow-hidden">
-                    <Barcode128
-                      serialNumber={result.serial_number || physicalSerial}
-                      height={32}
-                      moduleWidth={1.2}
-                      showText={false}
-                      className="w-full h-auto"
-                    />
+                  <div className="p-3 bg-white dark:bg-[#121F17] rounded-xl border border-[#E5E7EB] dark:border-[#1E382B] shrink-0 shadow-xs flex items-center justify-center">
+                    <FileText className="w-8 h-8 text-[#059669]" />
                   </div>
                   <div className="space-y-1 min-w-0 flex-1">
                     <div className="flex items-center space-x-1.5 text-[11px] font-bold text-[#14532D] dark:text-[#34D399]">
-                      <Barcode className="w-3.5 h-3.5" />
-                      <span>Identifier 2: Permanent Physical UID</span>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Identifier 2: Permanently Engraved Serial</span>
                     </div>
                     <div className="font-mono text-xs font-bold text-[#1F2937] dark:text-[#F1F5F9] truncate">
                       {result.serial_number || physicalSerial}
                     </div>
                     <div className="text-[10px] text-[#64748B] dark:text-[#94A3B8]">
-                      Format: ISO/IEC 15417 Code 128 (Laser Etch)
+                      Physical Casing Laser Engraving (Matched)
                     </div>
                   </div>
                 </div>
@@ -844,19 +827,6 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
           setIsDigitalScannerOpen(false);
           setSearchId(detectedCode);
           handleVerify(detectedCode);
-        }}
-      />
-
-      {/* Step 2 Casing Barcode Scanner Modal */}
-      <QRScannerModal
-        isOpen={isCasingScannerOpen}
-        onClose={() => setIsCasingScannerOpen(false)}
-        title="Scan Laser Casing Barcode / Data Matrix"
-        allowAnyText={true}
-        onScanSuccess={(detectedCode) => {
-          setIsCasingScannerOpen(false);
-          setPhysicalSerial(detectedCode);
-          handlePhysicalVerify(detectedCode);
         }}
       />
 
