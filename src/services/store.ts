@@ -560,6 +560,77 @@ export class BatteryRepository {
     };
     this.custodyEvents.set(p3.battery_id, [ev3_0]);
 
+    // 4. Benchmark EU Battery Passport (BAT-NMC8-A888D503)
+    const p4: BatteryPassport = {
+      battery_did: 'did:battery:sha256:a888d503b4d07d4867e5a6cc7db553cd9e5045cf4609ac13a507e0eb258e4aee',
+      battery_id: 'BAT-NMC8-A888D503',
+      serial_number: 'SN-2026-NMC-78284',
+      manufacturer_name: 'QuantumVolt Gigafactory',
+      model_designation: 'QV-Pack-90X',
+      chemistry: 'NMC 811',
+      manufacturing_date: '2026-01-20T08:00:00Z',
+      manufacturing_country: 'DE',
+      manufacturing_facility: 'Berlin-Brandenburg Gigafactory',
+      status: 'IN_SERVICE',
+      current_custodian: 'QuantumVolt Fleet Solutions',
+      current_vehicle_vin: 'WAUZZZF28NA097828',
+      technical_specs: {
+        rated_capacity_kwh: 90.0,
+        nominal_voltage_v: 400.0,
+        max_charge_power_kw: 250.0,
+        cell_count: 192,
+        pack_weight_kg: 480.0,
+      },
+      carbon_footprint: {
+        total_co2_kg_per_kwh: 61.0,
+        manufacturing_co2_kg: 27.5,
+        raw_materials_co2_kg: 28.5,
+        transport_co2_kg: 5.0,
+        eu_compliance_class: 'Class A',
+      },
+      recycled_content: {
+        cobalt_percentage: 16.0,
+        lithium_percentage: 6.0,
+        nickel_percentage: 12.0,
+        lead_percentage: 0.0,
+      },
+      health_state: {
+        state_of_health_pct: 98.2,
+        state_of_charge_pct: 85.0,
+        cycle_count: 85,
+        internal_resistance_mohm: 18.2,
+        capacity_fade_rate_pct_yr: 1.2,
+        last_telemetry_timestamp: '2026-10-28T10:00:00Z',
+      },
+      qr_code_url: '/api/v1/verify/BAT-NMC8-A888D503',
+      created_at: '2026-01-20T08:00:00Z',
+      updated_at: '2026-10-28T10:00:00Z',
+    };
+    this.passports.set(p4.battery_id, p4);
+
+    const ev4_0_hash = calculateEventHash(
+      GENESIS_PREV_HASH,
+      p4.battery_id,
+      'MANUFACTURED',
+      '2026-01-20T08:00:00Z',
+      'ACTOR-MFG-001',
+      { batch_id: 'QV-NMC-2026-BATCH' }
+    );
+    const ev4_0: CustodyEvent = {
+      event_id: 'EVT-004-GENESIS',
+      battery_id: p4.battery_id,
+      event_type: 'MANUFACTURED',
+      timestamp: '2026-01-20T08:00:00Z',
+      actor_id: 'ACTOR-MFG-001',
+      actor_role: 'MANUFACTURER',
+      actor_organization: 'QuantumVolt Gigafactory',
+      location: 'Berlin, Germany',
+      payload: { batch_id: 'QV-NMC-2026-BATCH' },
+      prev_hash: GENESIS_PREV_HASH,
+      hash: ev4_0_hash,
+    };
+    this.custodyEvents.set(p4.battery_id, [ev4_0]);
+
     // Initial Custody Transfers
     const t1: CustodyTransfer = {
       id: 'c1111111-cccc-cccc-cccc-cccccccccccc',
