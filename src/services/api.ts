@@ -17,6 +17,9 @@ import {
   UserProfile,
   Organization,
   DatabaseStatus,
+  BatteryMetricPoint,
+  AnalyticsOverview,
+  QpiAIExecutionAnalyticsItem,
 } from '../types';
 import {
   supabase,
@@ -943,5 +946,57 @@ export const api = {
       backend,
       { shots }
     );
+  },
+
+  async getAnalyticsOverview(): Promise<AnalyticsOverview> {
+    if (isBrowserRuntime) {
+      try {
+        return await backendFetch<AnalyticsOverview>('/analytics/overview', { method: 'GET' }, false);
+      } catch {
+        return batteryRepository.getAnalyticsOverview({ role: currentRole, organization: currentOrg });
+      }
+    }
+    return batteryRepository.getAnalyticsOverview({ role: currentRole, organization: currentOrg });
+  },
+
+  async getHealthTrends(batteryId: string, startDate?: string, endDate?: string): Promise<BatteryMetricPoint[]> {
+    const params = new URLSearchParams({ batteryId });
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+
+    if (isBrowserRuntime) {
+      try {
+        return await backendFetch<BatteryMetricPoint[]>(`/analytics/health-trends?${params.toString()}`, { method: 'GET' }, false);
+      } catch {
+        return batteryRepository.getBatteryMetricsHistory(batteryId, startDate, endDate, { role: currentRole, organization: currentOrg });
+      }
+    }
+    return batteryRepository.getBatteryMetricsHistory(batteryId, startDate, endDate, { role: currentRole, organization: currentOrg });
+  },
+
+  async getVerificationAnalytics(startDate?: string, endDate?: string): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+
+    if (isBrowserRuntime) {
+      try {
+        return await backendFetch<any[]>(`/analytics/verifications?${params.toString()}`, { method: 'GET' }, false);
+      } catch {
+        return batteryRepository.getVerificationAnalytics(startDate, endDate);
+      }
+    }
+    return batteryRepository.getVerificationAnalytics(startDate, endDate);
+  },
+
+  async getQpiAIExecutionsAnalytics(): Promise<QpiAIExecutionAnalyticsItem[]> {
+    if (isBrowserRuntime) {
+      try {
+        return await backendFetch<QpiAIExecutionAnalyticsItem[]>('/analytics/qpiai-executions', { method: 'GET' }, false);
+      } catch {
+        return batteryRepository.getQpiAIExecutionsAnalytics();
+      }
+    }
+    return batteryRepository.getQpiAIExecutionsAnalytics();
   },
 };

@@ -420,3 +420,75 @@ export interface DatabaseStatus {
   lastChecked?: string;
   tables?: DatabaseTableStatus[];
 }
+
+export interface BatteryMetricPoint {
+  id?: string;
+  battery_id: string;
+  state_of_health_pct: number;
+  state_of_charge_pct: number;
+  cycle_count: number;
+  internal_resistance_mohm: number;
+  capacity_fade_rate_pct_yr?: number;
+  recorded_at: string;
+  source: string;
+}
+
+export interface QpiAIExecutionAnalyticsItem {
+  id: string;
+  engine_type: 'QPIAI_OPT' | 'QPIAI_QUANTUM';
+  battery_id?: string;
+  status: string;
+  backend: string;
+  is_cloud_result: boolean;
+  execution_time_seconds?: number | null;
+  created_at: string;
+  parameters?: Record<string, any>;
+  results?: Record<string, any>;
+  error_message?: string | null;
+}
+
+export interface AnalyticsOverview {
+  total_passports: number;
+  lifecycle_distribution: Record<string, number>;
+  health_summary: {
+    avg_soh_pct: number;
+    min_soh_pct: number;
+    max_soh_pct: number;
+    total_metrics_recorded: number;
+  };
+  custody_transfers_summary: {
+    total: number;
+    by_state: Record<string, number>;
+    recent_transfers: Array<{
+      id: string;
+      battery_id: string;
+      sender_org_name: string;
+      receiver_org_name: string;
+      state: string;
+      transfer_type: string;
+      initiated_at: string;
+    }>;
+  };
+  anti_fraud_summary: {
+    total_checks: number;
+    matched_count: number;
+    mismatch_fraud_count: number;
+    verification_required_count: number;
+    tamper_reports_count: number;
+    suspicious_scans_detected: number;
+    recent_checks: Array<{
+      id?: string;
+      battery_id: string;
+      status: string;
+      is_authentic: boolean;
+      verified_at: string;
+      verifier_role: string;
+    }>;
+  };
+  qpiai_summary: {
+    total_executions: number;
+    cloud_executions_count: number;
+    local_simulation_count: number;
+    recent_executions: QpiAIExecutionAnalyticsItem[];
+  };
+}

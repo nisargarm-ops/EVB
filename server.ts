@@ -518,6 +518,88 @@ async function startServer() {
     }
   });
 
+  // Analytics: Fleet Metrology Overview
+  apiRouter.get(
+    '/analytics/overview',
+    auth.optionalAuth,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const overview = await supabaseBackendRepo.getAnalyticsOverview(req.actor || null);
+        res.json(overview);
+      } catch (err) {
+        sendError(res, err, 'Failed to load analytics overview');
+      }
+    }
+  );
+
+  // Analytics: Battery Health Trends (BMS Telemetry History)
+  apiRouter.get(
+    '/analytics/health-trends',
+    auth.optionalAuth,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { batteryId, startDate, endDate } = req.query;
+        if (!batteryId || typeof batteryId !== 'string') {
+          res.status(400).json({ detail: 'Query parameter `batteryId` is required.' });
+          return;
+        }
+
+        // Validate date filters if provided
+        if (startDate && isNaN(new Date(String(startDate)).getTime())) {
+          res.status(400).json({ detail: 'Invalid `startDate` filter. Must be an ISO date string.' });
+          return;
+        }
+        if (endDate && isNaN(new Date(String(endDate)).getTime())) {
+          res.status(400).json({ detail: 'Invalid `endDate` filter. Must be an ISO date string.' });
+          return;
+        }
+
+        const metrics = await supabaseBackendRepo.getBatteryMetricsHistory(
+          batteryId.trim(),
+          startDate ? String(startDate) : undefined,
+          endDate ? String(endDate) : undefined,
+          req.actor || null
+        );
+        res.json(metrics);
+      } catch (err) {
+        sendError(res, err, 'Failed to load battery health trends');
+      }
+    }
+  );
+
+  // Analytics: Verification Outcomes
+  apiRouter.get(
+    '/analytics/verifications',
+    auth.optionalAuth,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { startDate, endDate } = req.query;
+        const verifs = await supabaseBackendRepo.getVerificationAnalytics(
+          startDate ? String(startDate) : undefined,
+          endDate ? String(endDate) : undefined,
+          req.actor || null
+        );
+        res.json(verifs);
+      } catch (err) {
+        sendError(res, err, 'Failed to load verification analytics');
+      }
+    }
+  );
+
+  // Analytics: QpiAI Executions
+  apiRouter.get(
+    '/analytics/qpiai-executions',
+    auth.optionalAuth,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const execs = await supabaseBackendRepo.getQpiAIExecutionsAnalytics(req.actor || null);
+        res.json(execs);
+      } catch (err) {
+        sendError(res, err, 'Failed to load QpiAI optimization analytics');
+      }
+    }
+  );
+
   // QpiAI Optimization & Quantum Endpoints (authenticated, rate-limited, persisting execution records in Supabase)
   const QPIAI_ALLOWED_ROLES = [
     'MANUFACTURER',

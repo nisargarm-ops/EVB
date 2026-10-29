@@ -6,7 +6,8 @@ import {
   Activity, 
   PlusCircle, 
   Cpu, 
-  AlertCircle
+  AlertCircle,
+  BarChart3
 } from 'lucide-react';
 import { PassportSummary, UserRole } from '../types';
 import { api } from '../services/api';
@@ -19,6 +20,7 @@ interface DashboardProps {
   onShowQr: (id: string) => void;
   onNavigateCreate: () => void;
   onNavigateQpiAI: () => void;
+  onNavigateAnalytics?: () => void;
   activeRole: UserRole;
 }
 
@@ -27,6 +29,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onShowQr,
   onNavigateCreate,
   onNavigateQpiAI,
+  onNavigateAnalytics,
   activeRole
 }) => {
   const { t } = useLanguage();
@@ -102,6 +105,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <Cpu className="w-4 h-4 text-[#059669]" />
                 <span>Launch QpiAI Optimization Studio</span>
               </button>
+
+              {onNavigateAnalytics && (
+                <button
+                  onClick={onNavigateAnalytics}
+                  className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-[#F8FAF7] dark:bg-[#16261D] hover:bg-[#ECFDF3] dark:hover:bg-[#1F382B] text-[#14532D] dark:text-[#34D399] font-semibold text-xs border border-[#E5E7EB] dark:border-[#1E382B] hover:border-[#14532D] transition-all"
+                >
+                  <BarChart3 className="w-4 h-4 text-[#059669]" />
+                  <span>View Fleet Analytics & Trends</span>
+                </button>
+              )}
             </div>
           </div>
 

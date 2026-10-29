@@ -13,7 +13,8 @@ import {
   ChevronLeft, 
   ChevronRight, 
   X,
-  ShieldCheck
+  ShieldCheck,
+  BarChart3
 } from 'lucide-react';
 import { UserRole, UserProfile } from '../types';
 import { useLanguage } from '../context/LanguageContext';
@@ -54,6 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navItems = [
     { id: 'dashboard', label: t.navDashboard, icon: LayoutDashboard, roles: ['MANUFACTURER', 'OEM', 'FLEET_OPERATOR', 'SERVICE_CENTER', 'REMANUFACTURER', 'RECYCLER', 'REGULATOR_AUDITOR', 'ADMINISTRATOR'] },
+    { id: 'analytics', label: t.navAnalytics || 'Analytics & Metrology', icon: BarChart3, roles: ['MANUFACTURER', 'OEM', 'FLEET_OPERATOR', 'SERVICE_CENTER', 'REMANUFACTURER', 'RECYCLER', 'REGULATOR_AUDITOR', 'ADMINISTRATOR'] },
     { id: 'transfers', label: t.navTransfers, icon: Truck, roles: ['MANUFACTURER', 'OEM', 'FLEET_OPERATOR', 'SERVICE_CENTER', 'REMANUFACTURER', 'RECYCLER', 'REGULATOR_AUDITOR', 'ADMINISTRATOR'] },
     { id: 'qpiai', label: t.navQpiAI, icon: Cpu, roles: ['MANUFACTURER', 'OEM', 'FLEET_OPERATOR', 'SERVICE_CENTER', 'REMANUFACTURER', 'ADMINISTRATOR'] },
     { id: 'verify', label: t.navVerify, icon: QrCode, roles: ['MANUFACTURER', 'OEM', 'FLEET_OPERATOR', 'SERVICE_CENTER', 'REMANUFACTURER', 'RECYCLER', 'REGULATOR_AUDITOR', 'ADMINISTRATOR'] },

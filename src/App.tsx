@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
 import { Dashboard } from './pages/Dashboard';
+import { AnalyticsView } from './pages/AnalyticsView';
 import { PassportDetail } from './pages/PassportDetail';
 import { CreatePassport } from './pages/CreatePassport';
 import { VerifyPublic } from './pages/VerifyPublic';
@@ -271,7 +272,16 @@ const MainApp: React.FC = () => {
               onShowQr={handleShowQr}
               onNavigateCreate={() => setCurrentTab('create')}
               onNavigateQpiAI={() => setCurrentTab('qpiai')}
+              onNavigateAnalytics={() => setCurrentTab('analytics')}
               activeRole={activeRole}
+            />
+          )}
+
+          {currentTab === 'analytics' && (
+            <AnalyticsView
+              activeRole={activeRole}
+              activeOrg={activeOrg}
+              onNavigateDetail={handleSelectPassport}
             />
           )}
 

@@ -528,6 +528,98 @@ async function runTestSuite() {
     assert(false, 'Test 26', e.message);
   }
 
+  // --------------------------------------------------------------------------
+  // Test 27: Analytics overview calculations match authentic repository records
+  // --------------------------------------------------------------------------
+  try {
+    const overview = await batteryRepository.getAnalyticsOverview();
+    const isValidOverview =
+      overview.total_passports >= 3 &&
+      overview.lifecycle_distribution['IN_SERVICE'] >= 1 &&
+      overview.lifecycle_distribution['SECOND_LIFE'] >= 1 &&
+      overview.custody_transfers_summary.total >= 2 &&
+      overview.health_summary.avg_soh_pct > 0 &&
+      overview.health_summary.total_metrics_recorded >= 3;
+    assert(isValidOverview, `Test 27: Analytics overview calculations accurately aggregate real records (Total: ${overview.total_passports}, SOH Avg: ${overview.health_summary.avg_soh_pct}%)`);
+  } catch (e: any) {
+    assert(false, 'Test 27', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 28: Battery health trends date-range filtering correctly scopes BMS telemetry
+  // --------------------------------------------------------------------------
+  try {
+    // Battery BAT-NMC-8A2F91C0 has a metric on 2026-10-25
+    const allMetrics = await batteryRepository.getBatteryMetricsHistory(
+      'BAT-NMC-8A2F91C0',
+      undefined,
+      undefined,
+      { role: 'MANUFACTURER', organization: 'QuantumVolt Gigafactory' }
+    );
+    const hasData = allMetrics.length > 0 && allMetrics[0].state_of_health_pct === 88.4;
+
+    // Filter for future date should return empty array
+    const futureMetrics = await batteryRepository.getBatteryMetricsHistory(
+      'BAT-NMC-8A2F91C0',
+      '2099-01-01T00:00:00.000Z',
+      undefined,
+      { role: 'MANUFACTURER', organization: 'QuantumVolt Gigafactory' }
+    );
+    const filterWorks = futureMetrics.length === 0;
+
+    assert(hasData && filterWorks, 'Test 28: Battery health trends date filtering correctly returns real measurements and filters time ranges');
+  } catch (e: any) {
+    assert(false, 'Test 28', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 29: Security & RBAC: Public users blocked from detailed BMS health history
+  // --------------------------------------------------------------------------
+  try {
+    let publicBlocked = false;
+    try {
+      await batteryRepository.getBatteryMetricsHistory(
+        'BAT-NMC-8A2F91C0',
+        undefined,
+        undefined,
+        { role: 'PUBLIC', organization: 'Anonymous Citizen' }
+      );
+    } catch (e: any) {
+      if (e.message.includes('Access denied')) publicBlocked = true;
+    }
+    assert(publicBlocked, 'Test 29: Public actors blocked from detailed internal BMS telemetry history (403 Forbidden)');
+  } catch (e: any) {
+    assert(false, 'Test 29', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 30: Empty-state Guarantee: Querying non-existent metric returns empty array
+  // --------------------------------------------------------------------------
+  try {
+    const emptyMetrics = await batteryRepository.getBatteryMetricsHistory(
+      'BAT-LFP-3C7D410E',
+      '2020-01-01T00:00:00.000Z',
+      '2020-01-02T00:00:00.000Z',
+      { role: 'ADMINISTRATOR', organization: 'BatteryPass 360 Governance' }
+    );
+    const isEmpty = Array.isArray(emptyMetrics) && emptyMetrics.length === 0;
+    assert(isEmpty, 'Test 30: Zero-result date windows safely return empty list without fabricating measurements');
+  } catch (e: any) {
+    assert(false, 'Test 30', e.message);
+  }
+
+  // --------------------------------------------------------------------------
+  // Test 31: QpiAI Transparency Guarantee: Local simulation is never flagged as cloud
+  // --------------------------------------------------------------------------
+  try {
+    const qpiaiList = await batteryRepository.getQpiAIExecutionsAnalytics();
+    const hasSimulation = qpiaiList.some(q => q.is_cloud_result === false && q.backend.includes('Local'));
+    const noFalseCloud = !qpiaiList.some(q => q.backend.includes('Local') && q.is_cloud_result === true);
+    assert(hasSimulation && noFalseCloud, 'Test 31: QpiAI local simulations are strictly identified with is_cloud_result: false (Never presented as live cloud)');
+  } catch (e: any) {
+    assert(false, 'Test 31', e.message);
+  }
+
   console.log('\n----------------------------------------------------------------');
   console.log(`SUMMARY: ${passed} Passed, ${failed} Failed out of ${passed + failed} Tests`);
   console.log('----------------------------------------------------------------\n');

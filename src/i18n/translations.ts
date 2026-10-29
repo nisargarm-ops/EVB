@@ -11,6 +11,7 @@ export interface Translations {
 
   // Nav items
   navDashboard: string;
+  navAnalytics: string;
   navTransfers: string;
   navQpiAI: string;
   navVerify: string;
@@ -163,6 +164,7 @@ export const translations: Record<Language, Translations> = {
 
     // Nav items
     navDashboard: 'Dashboard & Fleet',
+    navAnalytics: 'Analytics & Metrology',
     navTransfers: 'Custody Transfers',
     navQpiAI: 'QpiAI Quantum & Opt',
     navVerify: 'QR Verification',
@@ -314,6 +316,7 @@ export const translations: Record<Language, Translations> = {
 
     // Nav items
     navDashboard: 'ಡ್ಯಾಶ್‌ಬೋರ್ಡ್ ಮತ್ತು ಫ್ಲೀಟ್',
+    navAnalytics: 'ವಿಶ್ಲೇಷಣೆ ಮತ್ತು ಪ್ರವೃತ್ತಿಗಳು',
     navTransfers: 'ಮಾಲೀಕತ್ವ ವರ್ಗಾವಣೆ',
     navQpiAI: 'QpiAI ಕ್ವಾಂಟಮ್ ಮತ್ತು ಆಪ್ಟ್',
     navVerify: 'QR ಪರಿಶೀಲನೆ',
@@ -465,6 +468,7 @@ export const translations: Record<Language, Translations> = {
 
     // Nav items
     navDashboard: 'डैशबोर्ड और बेड़ा',
+    navAnalytics: 'एनालिटिक्स और मेट्रोलॉजी',
     navTransfers: 'स्वामित्व हस्तांतरण',
     navQpiAI: 'QpiAI क्वांटम और ऑप्ट',
     navVerify: 'QR सत्यापन',

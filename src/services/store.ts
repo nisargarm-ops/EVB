@@ -11,7 +11,10 @@ import type {
   TamperReportRequest,
   TamperReportResponse,
   FraudAuditStatus,
-  Organization
+  Organization,
+  BatteryMetricPoint,
+  AnalyticsOverview,
+  QpiAIExecutionAnalyticsItem
 } from '../types/index.ts';
 import {
   GENESIS_PREV_HASH,
@@ -27,6 +30,8 @@ const STORAGE_KEY_TRANSFERS = 'bp360_custody_transfers_v2';
 const STORAGE_KEY_DECISIONS = 'bp360_decisions_v2';
 const STORAGE_KEY_VERIFICATIONS = 'bp360_physical_verifications_v1';
 const STORAGE_KEY_TAMPER_REPORTS = 'bp360_tamper_reports_v1';
+const STORAGE_KEY_METRICS = 'bp360_battery_metrics_v1';
+const STORAGE_KEY_QPIAI_EXECS = 'bp360_qpiai_execs_v1';
 
 export class BatteryRepository {
   private passports: Map<string, BatteryPassport> = new Map();
@@ -36,6 +41,8 @@ export class BatteryRepository {
   private physicalVerifications: Map<string, PhysicalVerificationResponse[]> = new Map();
   private tamperReports: Map<string, TamperReportResponse[]> = new Map();
   private organizations: Map<string, Organization> = new Map();
+  private batteryMetrics: Map<string, BatteryMetricPoint[]> = new Map();
+  private qpiaiExecutions: QpiAIExecutionAnalyticsItem[] = [];
 
   constructor() {
     this.init();
@@ -50,6 +57,8 @@ export class BatteryRepository {
     const savedDecisions = safeStorage.getItem(STORAGE_KEY_DECISIONS);
     const savedVerifications = safeStorage.getItem(STORAGE_KEY_VERIFICATIONS);
     const savedTamper = safeStorage.getItem(STORAGE_KEY_TAMPER_REPORTS);
+    const savedMetrics = safeStorage.getItem(STORAGE_KEY_METRICS);
+    const savedExecs = safeStorage.getItem(STORAGE_KEY_QPIAI_EXECS);
 
     if (savedPassports && savedCustody) {
       try {
@@ -86,6 +95,15 @@ export class BatteryRepository {
             this.tamperReports.set(id, list);
           }
         }
+        if (savedMetrics) {
+          const parsedM: Record<string, BatteryMetricPoint[]> = JSON.parse(savedMetrics);
+          for (const [id, list] of Object.entries(parsedM)) {
+            this.batteryMetrics.set(id, list);
+          }
+        }
+        if (savedExecs) {
+          this.qpiaiExecutions = JSON.parse(savedExecs);
+        }
         return;
       } catch (e) {
         console.warn('Failed to parse cached records, restoring seed data', e);
@@ -109,6 +127,8 @@ export class BatteryRepository {
       for (const [k, v] of this.physicalVerifications.entries()) vObj[k] = v;
       const trObj: Record<string, TamperReportResponse[]> = {};
       for (const [k, v] of this.tamperReports.entries()) trObj[k] = v;
+      const mObj: Record<string, BatteryMetricPoint[]> = {};
+      for (const [k, v] of this.batteryMetrics.entries()) mObj[k] = v;
 
       safeStorage.setItem(STORAGE_KEY_PASSPORTS, JSON.stringify(pObj));
       safeStorage.setItem(STORAGE_KEY_CUSTODY, JSON.stringify(cObj));
@@ -116,6 +136,8 @@ export class BatteryRepository {
       safeStorage.setItem(STORAGE_KEY_DECISIONS, JSON.stringify(dObj));
       safeStorage.setItem(STORAGE_KEY_VERIFICATIONS, JSON.stringify(vObj));
       safeStorage.setItem(STORAGE_KEY_TAMPER_REPORTS, JSON.stringify(trObj));
+      safeStorage.setItem(STORAGE_KEY_METRICS, JSON.stringify(mObj));
+      safeStorage.setItem(STORAGE_KEY_QPIAI_EXECS, JSON.stringify(this.qpiaiExecutions));
     } catch (e) {
       console.warn('Persistence update warning', e);
     }
@@ -554,6 +576,72 @@ export class BatteryRepository {
     };
     this.dispositionDecisions.set(d1.battery_id, d1);
 
+    // Initial Real BMS Telemetry Points
+    this.batteryMetrics.set('BAT-NMC-8A2F91C0', [
+      {
+        id: 'm1',
+        battery_id: 'BAT-NMC-8A2F91C0',
+        state_of_health_pct: 88.4,
+        state_of_charge_pct: 72.0,
+        cycle_count: 420,
+        internal_resistance_mohm: 19.8,
+        capacity_fade_rate_pct_yr: 1.9,
+        recorded_at: '2026-10-25T14:30:00.000Z',
+        source: 'BMS_TELEMETRY',
+      },
+    ]);
+    this.batteryMetrics.set('BAT-LFP-3C7D410E', [
+      {
+        id: 'm2',
+        battery_id: 'BAT-LFP-3C7D410E',
+        state_of_health_pct: 76.8,
+        state_of_charge_pct: 55.0,
+        cycle_count: 1850,
+        internal_resistance_mohm: 26.4,
+        capacity_fade_rate_pct_yr: 2.1,
+        recorded_at: '2026-10-20T12:00:00.000Z',
+        source: 'BESS_DIAGNOSTIC',
+      },
+    ]);
+    this.batteryMetrics.set('BAT-NCA-F104A7B2', [
+      {
+        id: 'm3',
+        battery_id: 'BAT-NCA-F104A7B2',
+        state_of_health_pct: 64.2,
+        state_of_charge_pct: 20.0,
+        cycle_count: 2480,
+        internal_resistance_mohm: 34.0,
+        capacity_fade_rate_pct_yr: 3.2,
+        recorded_at: '2026-10-18T16:00:00.000Z',
+        source: 'RECYCLING_INGESTION',
+      },
+    ]);
+
+    // Initial QpiAI Executions
+    this.qpiaiExecutions = [
+      {
+        id: 'q-init-1',
+        engine_type: 'QPIAI_OPT',
+        battery_id: 'BAT-NMC-8A2F91C0',
+        backend: 'Local-Exact-QUBO-Enumerator',
+        status: 'LOCAL_SOLVED',
+        is_cloud_result: false,
+        execution_time_seconds: 0.042,
+        created_at: '2026-10-25T15:00:00.000Z',
+        parameters: { mode: 'local', battery_ids: ['BAT-NMC-8A2F91C0'] },
+        results: {
+          recommended_allocations: [
+            {
+              battery_id: 'BAT-NMC-8A2F91C0',
+              recommended_pathway: 'stationary_bess',
+              score: 91.2,
+              explanation: 'High remaining capacity (88.4% SoH) makes pack optimal for stationary containerized grid BESS.'
+            }
+          ]
+        }
+      }
+    ];
+
     this.persist();
   }
 
@@ -784,6 +872,22 @@ export class BatteryRepository {
 
     chain.push(event);
     this.custodyEvents.set(passport.battery_id, chain);
+
+    // Append to actual historical metrics collection
+    const metricsList = this.batteryMetrics.get(passport.battery_id) || [];
+    metricsList.push({
+      id: `m_${Date.now()}`,
+      battery_id: passport.battery_id,
+      state_of_health_pct: passport.health_state.state_of_health_pct,
+      state_of_charge_pct: passport.health_state.state_of_charge_pct,
+      cycle_count: passport.health_state.cycle_count,
+      internal_resistance_mohm: passport.health_state.internal_resistance_mohm,
+      capacity_fade_rate_pct_yr: passport.health_state.capacity_fade_rate_pct_yr,
+      recorded_at: now,
+      source: telemetry.source || 'BMS_TELEMETRY',
+    });
+    this.batteryMetrics.set(passport.battery_id, metricsList);
+
     this.persist();
 
     return passport;
@@ -1289,6 +1393,200 @@ export class BatteryRepository {
       }
     }
     return list;
+  }
+
+  async getBatteryMetricsHistory(
+    batteryId: string,
+    startDate?: string,
+    endDate?: string,
+    actor?: any
+  ): Promise<BatteryMetricPoint[]> {
+    if (actor && actor.role === 'PUBLIC') {
+      throw new Error('Access denied: Detailed BMS telemetry history requires authorized enterprise credentials.');
+    }
+    const cleanId = String(batteryId || '').trim();
+    if (!cleanId) {
+      throw new Error('Battery ID is required to fetch health trend telemetry.');
+    }
+
+    const passport = await this.getPassport(cleanId);
+    if (!passport) {
+      throw new Error(`Battery passport '${cleanId}' not found in registry.`);
+    }
+
+    if (actor && actor.role && actor.role !== 'ADMINISTRATOR' && actor.role !== 'REGULATOR_AUDITOR') {
+      const userOrg = String(actor.organization || '').trim().toLowerCase();
+      const custodianOrg = String(passport.current_custodian || '').trim().toLowerCase();
+      const mfgOrg = String(passport.manufacturer_name || '').trim().toLowerCase();
+      if (userOrg && userOrg !== custodianOrg && userOrg !== mfgOrg) {
+        throw new Error(`Access denied: Organization '${actor.organization}' does not have permission to view internal telemetry for battery '${passport.battery_id}'.`);
+      }
+    }
+
+    const points = this.batteryMetrics.get(passport.battery_id) || [];
+    let filtered = points;
+    if (startDate) {
+      const startMs = new Date(startDate).getTime();
+      if (!isNaN(startMs)) {
+        filtered = filtered.filter(p => new Date(p.recorded_at).getTime() >= startMs);
+      }
+    }
+    if (endDate) {
+      const endMs = new Date(endDate).getTime();
+      if (!isNaN(endMs)) {
+        filtered = filtered.filter(p => new Date(p.recorded_at).getTime() <= endMs);
+      }
+    }
+    return filtered.sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime());
+  }
+
+  async getAnalyticsOverview(actor?: any): Promise<AnalyticsOverview> {
+    const passports = Array.from(this.passports.values());
+
+    const lifecycleDist: Record<string, number> = {
+      MANUFACTURED: 0,
+      IN_SERVICE: 0,
+      MAINTENANCE: 0,
+      SECOND_LIFE: 0,
+      END_OF_LIFE: 0,
+      RECYCLED: 0,
+      DECOMMISSIONED: 0,
+    };
+    for (const p of passports) {
+      if (lifecycleDist[p.status] !== undefined) {
+        lifecycleDist[p.status]++;
+      } else {
+        lifecycleDist[p.status] = 1;
+      }
+    }
+
+    let totalSoh = 0;
+    let minSoh = 100;
+    let maxSoh = 0;
+    let totalPoints = 0;
+    for (const metrics of this.batteryMetrics.values()) {
+      for (const m of metrics) {
+        totalSoh += m.state_of_health_pct;
+        if (m.state_of_health_pct < minSoh) minSoh = m.state_of_health_pct;
+        if (m.state_of_health_pct > maxSoh) maxSoh = m.state_of_health_pct;
+        totalPoints++;
+      }
+    }
+    const avgSoh = totalPoints > 0 ? Number((totalSoh / totalPoints).toFixed(1)) : 0;
+
+    const transfers = Array.from(this.custodyTransfers.values());
+    const transfersByState: Record<string, number> = {
+      ACCEPTED: 0,
+      PENDING: 0,
+      REJECTED: 0,
+      CANCELLED: 0,
+    };
+    for (const t of transfers) {
+      if (transfersByState[t.state] !== undefined) {
+        transfersByState[t.state]++;
+      }
+    }
+
+    let matchedCount = 0;
+    let mismatchFraudCount = 0;
+    let verificationRequiredCount = 0;
+    const recentChecks: Array<any> = [];
+
+    for (const list of this.physicalVerifications.values()) {
+      for (const v of list) {
+        if (v.status === 'MATCHED') {
+          matchedCount++;
+        } else if (v.status === 'MISMATCH_FRAUD' || v.status === 'UNREGISTERED_SERIAL') {
+          mismatchFraudCount++;
+        } else {
+          verificationRequiredCount++;
+        }
+        recentChecks.push({
+          battery_id: v.battery_id,
+          status: v.status,
+          is_authentic: v.is_authentic,
+          verified_at: v.verified_at,
+          verifier_role: v.verifier?.role || 'PUBLIC',
+        });
+      }
+    }
+
+    let cloudExecs = 0;
+    let localExecs = 0;
+    for (const exec of this.qpiaiExecutions) {
+      if (exec.is_cloud_result || exec.backend === 'qpi_ai_cloud') {
+        cloudExecs++;
+      } else {
+        localExecs++;
+      }
+    }
+
+    return {
+      total_passports: passports.length,
+      lifecycle_distribution: lifecycleDist,
+      health_summary: {
+        avg_soh_pct: avgSoh,
+        min_soh_pct: totalPoints > 0 ? minSoh : 0,
+        max_soh_pct: totalPoints > 0 ? maxSoh : 0,
+        total_metrics_recorded: totalPoints,
+      },
+      custody_transfers_summary: {
+        total: transfers.length,
+        by_state: transfersByState,
+        recent_transfers: transfers.slice(0, 10).map(t => ({
+          id: t.id,
+          battery_id: t.battery_id,
+          sender_org_name: t.sender_org_name,
+          receiver_org_name: t.receiver_org_name,
+          state: t.state,
+          transfer_type: t.transfer_type,
+          initiated_at: t.initiated_at,
+        })),
+      },
+      anti_fraud_summary: {
+        total_checks: matchedCount + mismatchFraudCount + verificationRequiredCount,
+        matched_count: matchedCount,
+        mismatch_fraud_count: mismatchFraudCount,
+        verification_required_count: verificationRequiredCount,
+        tamper_reports_count: Array.from(this.tamperReports.values()).reduce((sum, list) => sum + list.length, 0),
+        suspicious_scans_detected: Array.from(this.physicalVerifications.values()).reduce((sum, list) => sum + list.filter(v => v.suspicious_repeated_scans).length, 0),
+        recent_checks: recentChecks.slice(-10).reverse(),
+      },
+      qpiai_summary: {
+        total_executions: this.qpiaiExecutions.length,
+        cloud_executions_count: cloudExecs,
+        local_simulation_count: localExecs,
+        recent_executions: this.qpiaiExecutions.slice(-10).reverse(),
+      },
+    };
+  }
+
+  async getVerificationAnalytics(startDate?: string, endDate?: string, _actor?: any): Promise<any> {
+    const list: Array<any> = [];
+    for (const checks of this.physicalVerifications.values()) {
+      for (const c of checks) {
+        list.push(c);
+      }
+    }
+    let filtered = list;
+    if (startDate) {
+      const sMs = new Date(startDate).getTime();
+      if (!isNaN(sMs)) filtered = filtered.filter(c => new Date(c.verified_at).getTime() >= sMs);
+    }
+    if (endDate) {
+      const eMs = new Date(endDate).getTime();
+      if (!isNaN(eMs)) filtered = filtered.filter(c => new Date(c.verified_at).getTime() <= eMs);
+    }
+    return filtered.sort((a, b) => new Date(a.verified_at).getTime() - new Date(b.verified_at).getTime());
+  }
+
+  async getQpiAIExecutionsAnalytics(_actor?: any): Promise<QpiAIExecutionAnalyticsItem[]> {
+    return this.qpiaiExecutions;
+  }
+
+  logQpiAIExecution(execution: QpiAIExecutionAnalyticsItem) {
+    this.qpiaiExecutions.push(execution);
+    this.persist();
   }
 }
 

@@ -19,6 +19,9 @@ import type {
   TamperReportResponse,
   FraudAuditStatus,
   UserRole,
+  BatteryMetricPoint,
+  AnalyticsOverview,
+  QpiAIExecutionAnalyticsItem,
 } from '../types/index.ts';
 import {
   GENESIS_PREV_HASH,
@@ -2712,6 +2715,275 @@ export class SupabaseBackendRepository {
     } catch {
       // Ignore non-fatal audit log errors
     }
+  }
+
+  async getBatteryMetricsHistory(
+    batteryIdOrDid: string,
+    startDate?: string,
+    endDate?: string,
+    actor?: AuthenticatedActor | null
+  ): Promise<BatteryMetricPoint[]> {
+    if (!this.isConfigured()) {
+      return batteryRepository.getBatteryMetricsHistory(
+        batteryIdOrDid,
+        startDate,
+        endDate,
+        actor ? actorToProfile(actor) : null
+      );
+    }
+
+    if (!actor || actor.role === 'PUBLIC') {
+      throw new DomainError('Access denied: Detailed BMS telemetry history requires authorized enterprise credentials.', 403);
+    }
+
+    const cleanId = String(batteryIdOrDid || '').trim();
+    if (!cleanId) {
+      throw new DomainError('Battery ID is required to fetch health trend telemetry.', 400);
+    }
+
+    const row = await this.findRawBatteryRow(cleanId);
+    if (!row) {
+      throw new DomainError(`Battery passport '${cleanId}' not found.`, 404);
+    }
+
+    if (actor.role !== 'ADMINISTRATOR' && actor.role !== 'REGULATOR_AUDITOR') {
+      const orgId = actor.organization_id;
+      const isOwner = row.current_custodian_org_id === orgId || row.manufacturer_org_id === orgId;
+      if (!isOwner && actor.role !== 'SERVICE_CENTER' && actor.role !== 'REMANUFACTURER') {
+        throw new DomainError(`Access denied: Organization does not have stewardship or telemetry access for battery '${row.battery_id}'.`, 403);
+      }
+    }
+
+    const db = this.getAdminClient();
+    let query = db
+      .from('battery_metrics')
+      .select('*')
+      .eq('battery_id', row.id);
+
+    if (startDate) query = query.gte('recorded_at', startDate);
+    if (endDate) query = query.lte('recorded_at', endDate);
+    query = query.order('recorded_at', { ascending: true });
+
+    const { data, error } = await query;
+    if (error) {
+      throw new DomainError(`Failed to fetch battery metrics: ${error.message}`, 500);
+    }
+
+    return (data || []).map((r) => ({
+      id: r.id,
+      battery_id: row.battery_id,
+      state_of_health_pct: Number(r.state_of_health_pct),
+      state_of_charge_pct: Number(r.state_of_charge_pct),
+      cycle_count: Number(r.cycle_count),
+      internal_resistance_mohm: Number(r.internal_resistance_mohm),
+      capacity_fade_rate_pct_yr: Number(r.capacity_fade_rate_pct_yr ?? 0),
+      recorded_at: toIsoUtc(r.recorded_at),
+      source: r.source || 'BMS_TELEMETRY',
+    }));
+  }
+
+  async getAnalyticsOverview(actor?: AuthenticatedActor | null): Promise<AnalyticsOverview> {
+    if (!this.isConfigured()) {
+      return batteryRepository.getAnalyticsOverview(actor ? actorToProfile(actor) : null);
+    }
+
+    const db = this.getAdminClient();
+
+    // 1. Batteries & Lifecycle distribution
+    const { data: batteryRows, error: bErr } = await db
+      .from('batteries')
+      .select('id, battery_id, status, manufacturer_org_id, current_custodian_org_id');
+
+    if (bErr) throw new DomainError(`Failed to query batteries: ${bErr.message}`, 500);
+
+    const lifecycleDist: Record<string, number> = {
+      MANUFACTURED: 0,
+      IN_SERVICE: 0,
+      MAINTENANCE: 0,
+      SECOND_LIFE: 0,
+      END_OF_LIFE: 0,
+      RECYCLED: 0,
+      DECOMMISSIONED: 0,
+    };
+    for (const b of batteryRows || []) {
+      const st = String(b.status || 'MANUFACTURED');
+      lifecycleDist[st] = (lifecycleDist[st] || 0) + 1;
+    }
+
+    // 2. Health summary from actual recorded measurements in battery_metrics
+    const { data: metricRows } = await db
+      .from('battery_metrics')
+      .select('state_of_health_pct, recorded_at');
+
+    let totalSoh = 0;
+    let minSoh = 100;
+    let maxSoh = 0;
+    const totalPoints = (metricRows || []).length;
+
+    for (const m of metricRows || []) {
+      const val = Number(m.state_of_health_pct);
+      totalSoh += val;
+      if (val < minSoh) minSoh = val;
+      if (val > maxSoh) maxSoh = val;
+    }
+    const avgSoh = totalPoints > 0 ? Number((totalSoh / totalPoints).toFixed(1)) : 0;
+
+    // 3. Custody transfers summary
+    const { data: transferRows } = await db
+      .from('custody_transfers')
+      .select('*')
+      .order('initiated_at', { ascending: false });
+
+    const transfersByState: Record<string, number> = {
+      ACCEPTED: 0,
+      PENDING: 0,
+      REJECTED: 0,
+      CANCELLED: 0,
+    };
+    for (const t of transferRows || []) {
+      const st = String(t.state || 'PENDING');
+      transfersByState[st] = (transfersByState[st] || 0) + 1;
+    }
+
+    // 4. Verification results
+    const { data: verifRows } = await db
+      .from('verification_results')
+      .select('*')
+      .order('verified_at', { ascending: false });
+
+    let matchedCount = 0;
+    let mismatchFraudCount = 0;
+    let verificationRequiredCount = 0;
+
+    for (const v of verifRows || []) {
+      const matchStatus = v.metadata?.match_status;
+      if (v.is_authentic || matchStatus === 'MATCHED') {
+        matchedCount++;
+      } else if (matchStatus === 'MISMATCH_FRAUD' || matchStatus === 'UNREGISTERED_SERIAL' || !v.is_authentic) {
+        mismatchFraudCount++;
+      } else {
+        verificationRequiredCount++;
+      }
+    }
+
+    // 5. QpiAI execution records
+    const { data: qpiaiRows } = await db
+      .from('qpiai_execution_records')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    let cloudCount = 0;
+    let localCount = 0;
+    const recentExecs: QpiAIExecutionAnalyticsItem[] = [];
+
+    for (const q of qpiaiRows || []) {
+      const isCloud = q.results?.is_cloud_result === true || q.backend === 'qpi_ai_cloud';
+      if (isCloud) cloudCount++;
+      else localCount++;
+
+      recentExecs.push({
+        id: q.id,
+        engine_type: q.engine_type,
+        battery_id: q.battery_id,
+        status: q.status,
+        backend: q.backend,
+        is_cloud_result: isCloud,
+        execution_time_seconds: q.execution_time_seconds ? Number(q.execution_time_seconds) : null,
+        created_at: toIsoUtc(q.created_at),
+        parameters: q.parameters || {},
+        results: q.results || {},
+        error_message: q.error_message || null,
+      });
+    }
+
+    return {
+      total_passports: (batteryRows || []).length,
+      lifecycle_distribution: lifecycleDist,
+      health_summary: {
+        avg_soh_pct: avgSoh,
+        min_soh_pct: totalPoints > 0 ? minSoh : 0,
+        max_soh_pct: totalPoints > 0 ? maxSoh : 0,
+        total_metrics_recorded: totalPoints,
+      },
+      custody_transfers_summary: {
+        total: (transferRows || []).length,
+        by_state: transfersByState,
+        recent_transfers: (transferRows || []).slice(0, 10).map((t) => ({
+          id: t.id,
+          battery_id: t.battery_id,
+          sender_org_name: 'Authorized Sender',
+          receiver_org_name: 'Authorized Recipient',
+          state: t.state,
+          transfer_type: t.transfer_type,
+          initiated_at: toIsoUtc(t.initiated_at),
+        })),
+      },
+      anti_fraud_summary: {
+        total_checks: (verifRows || []).length,
+        matched_count: matchedCount,
+        mismatch_fraud_count: mismatchFraudCount,
+        verification_required_count: verificationRequiredCount,
+        tamper_reports_count: 0,
+        suspicious_scans_detected: 0,
+        recent_checks: (verifRows || []).slice(0, 10).map((v) => ({
+          id: v.id,
+          battery_id: v.battery_id,
+          status: v.metadata?.match_status || (v.is_authentic ? 'MATCHED' : 'MISMATCH_FRAUD'),
+          is_authentic: v.is_authentic,
+          verified_at: toIsoUtc(v.verified_at),
+          verifier_role: v.verifier_role || 'PUBLIC',
+        })),
+      },
+      qpiai_summary: {
+        total_executions: (qpiaiRows || []).length,
+        cloud_executions_count: cloudCount,
+        local_simulation_count: localCount,
+        recent_executions: recentExecs,
+      },
+    };
+  }
+
+  async getVerificationAnalytics(
+    startDate?: string,
+    endDate?: string,
+    actor?: AuthenticatedActor | null
+  ): Promise<any> {
+    if (!this.isConfigured()) {
+      return batteryRepository.getVerificationAnalytics(startDate, endDate, actor ? actorToProfile(actor) : null);
+    }
+    const db = this.getAdminClient();
+    let query = db.from('verification_results').select('*');
+    if (startDate) query = query.gte('verified_at', startDate);
+    if (endDate) query = query.lte('verified_at', endDate);
+    const { data } = await query.order('verified_at', { ascending: true });
+    return data || [];
+  }
+
+  async getQpiAIExecutionsAnalytics(actor?: AuthenticatedActor | null): Promise<QpiAIExecutionAnalyticsItem[]> {
+    if (!this.isConfigured()) {
+      return batteryRepository.getQpiAIExecutionsAnalytics(actor ? actorToProfile(actor) : null);
+    }
+    const db = this.getAdminClient();
+    const { data } = await db
+      .from('qpiai_execution_records')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    return (data || []).map((q) => ({
+      id: q.id,
+      engine_type: q.engine_type,
+      battery_id: q.battery_id,
+      status: q.status,
+      backend: q.backend,
+      is_cloud_result: q.results?.is_cloud_result === true || q.backend === 'qpi_ai_cloud',
+      execution_time_seconds: q.execution_time_seconds ? Number(q.execution_time_seconds) : null,
+      created_at: toIsoUtc(q.created_at),
+      parameters: q.parameters || {},
+      results: q.results || {},
+      error_message: q.error_message || null,
+    }));
   }
 }
 
