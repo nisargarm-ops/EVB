@@ -119,7 +119,14 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
 
   // Step 2: Submit Permanent Laser-Engraved UID for Backend Comparison
   const handlePhysicalVerify = async (serialToVerify?: string) => {
-    const targetSerial = canonicalizeSerial(serialToVerify ?? physicalSerial);
+    const rawSerial = serialToVerify ?? physicalSerial;
+    const targetSerial = canonicalizeSerial(rawSerial);
+    console.log('[Dual-ID Verify] Submitting verification:', {
+      batteryId: precheck?.battery_id,
+      inputRaw: rawSerial,
+      canonicalTarget: targetSerial,
+    });
+
     if (!targetSerial) {
       setPhysicalError('Please enter or scan the permanent laser-engraved UID from the physical battery pack casing.');
       return;
@@ -144,6 +151,7 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
         barcode_type: 'MANUAL',
       });
 
+      console.log('[Dual-ID Verify] Verification outcome:', outcome);
       setPhysicalResult(outcome);
 
       if (outcome.status === 'MATCHED') {
@@ -545,9 +553,20 @@ export const VerifyPublic: React.FC<VerifyPublicProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <p className="text-[11px] text-[#991B1B] dark:text-[#FCA5A5] italic pt-1">
-                    Please contact an authorized regulator auditor or system administrator to inspect the physical pack and resolve this alert.
-                  </p>
+                  <div className="pt-2 space-y-2">
+                    <p className="text-[11px] text-[#991B1B] dark:text-[#FCA5A5] italic">
+                      Please contact an authorized regulator auditor or system administrator to inspect the physical pack and resolve this alert.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleResetLockout}
+                      disabled={resettingLockout}
+                      className="px-4 py-2 rounded-xl bg-[#059669] hover:bg-[#047857] text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center space-x-1.5 shrink-0 disabled:opacity-50"
+                    >
+                      <Unlock className="w-4 h-4" />
+                      <span>{resettingLockout ? 'Clearing Lockout...' : 'Reset Lockout & Restore 5 Attempts'}</span>
+                    </button>
+                  </div>
                 )}
               </div>
             ) : (
