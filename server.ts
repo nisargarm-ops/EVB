@@ -29,6 +29,8 @@ import {
   resolveOptBaseUrl,
   resolveQCloudBaseUrl,
 } from './src/services/qpiai.ts';
+import { QuboDispatchService } from './src/server/quboDispatchService.ts';
+import { qpiaiLogger } from './src/server/qpiaiLogger.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -698,6 +700,25 @@ async function startServer() {
     'REGULATOR_AUDITOR',
     'ADMINISTRATOR',
   ] as const;
+
+  // QpiAI QUBO Facility Dispatch Optimization Endpoint
+  apiRouter.post(
+    '/qubo/dispatch',
+    auth.optionalAuth,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const dispatchResult = await QuboDispatchService.executeDispatch(
+          req.body || {},
+          req.actor || null,
+          req.originalUrl || '/api/qubo/dispatch',
+          'POST'
+        );
+        res.json(dispatchResult);
+      } catch (err) {
+        sendError(res, err, 'Facility Dispatch QUBO optimization failed');
+      }
+    }
+  );
 
   apiRouter.post(
     '/qpiai/opt/allocate',

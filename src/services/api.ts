@@ -974,6 +974,28 @@ export const api = {
   // --------------------------------------------------------------------------
   // QpiAI Engines & Execution Records
   // --------------------------------------------------------------------------
+  async runQuboDispatch(
+    payload: {
+      battery_ids?: string[];
+      facilities?: any[];
+      mode?: 'platform' | 'local' | 'simulation';
+      carbon_weight?: number;
+    }
+  ): Promise<any> {
+    if (isBrowserRuntime) {
+      return backendFetch<any>(
+        '/qubo/dispatch',
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        },
+        false
+      );
+    }
+    const { QuboDispatchService } = await import('../server/quboDispatchService.js');
+    return QuboDispatchService.executeDispatch(payload, null);
+  },
+
   async runQpiAIOpt(
     batteryIds: string[],
     mode: 'platform' | 'local' = 'platform'
